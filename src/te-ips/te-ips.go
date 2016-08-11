@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	Ver              = "0.1"
+	Ver              = "0.2"
 	ApiUrl           = "https://api.thousandeyes.com/agents.json"
 	IPList           = "ip"
 	SubnetListStrict = "subnet-strict"
