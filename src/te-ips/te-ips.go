@@ -19,16 +19,19 @@ import (
 )
 
 const (
-	Ver              = "0.2"
-	ApiUrl           = "https://api.thousandeyes.com/agents.json"
-	IPList           = "ip"
-	SubnetListStrict = "subnet-strict"
-	SubnetListLoose  = "subnet-loose"
-	CSV              = "csv"
-	JSON             = "json"
-	XML              = "xml"
-	Enterprise = "Enterprise"
-	Cloud = "Cloud"
+	Ver               = "0.3"
+	ApiUrl            = "https://api.thousandeyes.com/agents.json"
+	IPList            = "ip"
+	SubnetListStrict  = "subnet-strict"
+	SubnetListLoose   = "subnet-loose"
+	CSV               = "csv"
+	JSON              = "json"
+	XML               = "xml"
+	Enterprise        = "Enterprise"
+	Cloud             = "Cloud"
+	ListCommentChar   = "#"
+	ListSeparatorChar = ";"
+	CSVSeparatorChar  = ";"
 )
 
 var log = new(Log)
@@ -59,6 +62,7 @@ func main() {
 	i6 := flag.Bool("6", false, "Display only IPv6 addresses")
 	ea := flag.Bool("e", false, "Display only Enterprise Agent addresses")
 	ca := flag.Bool("c", false, "Display only Cloud Agent addresses")
+	name := flag.Bool("n", false, "Add Agent name as a comment to "+IPList+", "+SubnetListStrict+" and "+SubnetListLoose+" output types.")
 	flag.Parse()
 
 	if *version == true {
@@ -103,11 +107,11 @@ func main() {
 	agents, _ := fetchAgents(*user, *token, enterprise, cloud, ipv4, ipv6)
 
 	if strings.ToLower(*output) == IPList {
-		outputIPList(agents)
+		outputIPList(agents, *name)
 	} else if strings.ToLower(*output) == SubnetListStrict {
-		outputSubnetListStrict(agents)
+		outputSubnetListStrict(agents, *name)
 	} else if strings.ToLower(*output) == SubnetListLoose {
-		outputSubnetListLoose(agents)
+		outputSubnetListLoose(agents, *name)
 	} else if strings.ToLower(*output) == CSV {
 		outputCSV(agents)
 	} else if strings.ToLower(*output) == JSON {
@@ -151,7 +155,10 @@ func fetchAgents(user string, token string, enterprise bool, cloud bool, ipv4 bo
 	}
 	request, _ := http.NewRequest("GET", ApiUrl, nil)
 	request.SetBasicAuth(user, token)
-	response, _ := netClient.Do(request)
+	response, err := netClient.Do(request)
+	if err != nil {
+		log.Error("TE API request error: %s", err.Error())
+	}
 
 	if response.StatusCode == http.StatusOK {
 		// yupepeeee
@@ -161,20 +168,20 @@ func fetchAgents(user string, token string, enterprise bool, cloud bool, ipv4 bo
 		log.Error("TE API HTTP error: %s (%s)", response.Status, response.StatusCode)
 	}
 
-	err := json.NewDecoder(response.Body).Decode(&agents)
+	err = json.NewDecoder(response.Body).Decode(&agents)
 	if err != nil {
 		return []Agent{}, err
 	}
 
 	if !enterprise || !cloud {
 		for i := len(agents.Agents) - 1; i >= 0; i-- {
-	    agent := agents.Agents[i]
-	    // Condition to decide if current element has to be deleted:
-	    if enterprise && agent.AgentType == Enterprise {
-	      // Keep it
-	    }	else if cloud && agent.AgentType == Cloud {
-	      // Keep it
-	    } else {
+			agent := agents.Agents[i]
+			// Condition to decide if current element has to be deleted:
+			if enterprise && agent.AgentType == Enterprise {
+				// Keep it
+			} else if cloud && agent.AgentType == Cloud {
+				// Keep it
+			} else {
 				agents.Agents = append(agents.Agents[:i], agents.Agents[i+1:]...)
 			}
 		}
@@ -196,43 +203,87 @@ func fetchAgents(user string, token string, enterprise bool, cloud bool, ipv4 bo
 	return agents.Agents, nil
 }
 
-func outputIPList(agents []Agent) {
+func outputIPList(agents []Agent, name bool) {
 
 	ips := sortAgentIPs(agents)
 
 	for _, ip := range ips {
-		fmt.Printf("%s\n", ip.String())
+		if name {
+			agentsWithIP := getAgentsByIP(agents, ip)
+			agentsStr := ""
+			for _, agent := range agentsWithIP {
+				agentsStr = agentsStr + ListSeparatorChar + " " + agent.AgentName
+			}
+			if len(agentsStr) > 1 {
+				agentsStr = agentsStr[2:]
+			}
+			fmt.Printf("%s %s %s\n", pad(ip.String(), 39), ListCommentChar, agentsStr)
+		} else {
+			fmt.Printf("%s\n", ip.String())
+		}
 	}
 
 }
 
-func outputSubnetListStrict(agents []Agent) {
+func outputSubnetListStrict(agents []Agent, name bool) {
 
 	ips := sortAgentIPs(agents)
 	ipNets := ipsToSubnetsStrict(ips)
 
 	for _, ipNet := range ipNets {
 		s, t := ipNet.Mask.Size()
-		if s == t {
-			fmt.Printf("%s\n", ipNet.IP.String())
+		if name {
+			agentsWithIP := getAgentsBySubnet(agents, ipNet)
+			agentsStr := ""
+			for _, agent := range agentsWithIP {
+				agentsStr = agentsStr + ListSeparatorChar + " " + agent.AgentName
+			}
+			if len(agentsStr) > 1 {
+				agentsStr = agentsStr[2:]
+			}
+			if s == t {
+				fmt.Printf("%s %s %s\n", pad(ipNet.IP.String(), 39), ListCommentChar, agentsStr)
+			} else {
+				fmt.Printf("%s %s %s\n", pad(ipNet.String(), 39), ListCommentChar, agentsStr)
+			}
 		} else {
-			fmt.Printf("%s\n", ipNet.String())
+			if s == t {
+				fmt.Printf("%s\n", ipNet.IP.String())
+			} else {
+				fmt.Printf("%s\n", ipNet.String())
+			}
 		}
 	}
 
 }
 
-func outputSubnetListLoose(agents []Agent) {
+func outputSubnetListLoose(agents []Agent, name bool) {
 
 	ips := sortAgentIPs(agents)
 	ipNets := ipsToSubnetsLoose(ips)
 
 	for _, ipNet := range ipNets {
 		s, t := ipNet.Mask.Size()
-		if s == t {
-			fmt.Printf("%s\n", ipNet.IP.String())
+		if name {
+			agentsWithIP := getAgentsBySubnet(agents, ipNet)
+			agentsStr := ""
+			for _, agent := range agentsWithIP {
+				agentsStr = agentsStr + ListSeparatorChar + " " + agent.AgentName
+			}
+			if len(agentsStr) > 1 {
+				agentsStr = agentsStr[2:]
+			}
+			if s == t {
+				fmt.Printf("%s %s %s\n", pad(ipNet.IP.String(), 39), ListCommentChar, agentsStr)
+			} else {
+				fmt.Printf("%s %s %s\n", pad(ipNet.String(), 39), ListCommentChar, agentsStr)
+			}
 		} else {
-			fmt.Printf("%s\n", ipNet.String())
+			if s == t {
+				fmt.Printf("%s\n", ipNet.IP.String())
+			} else {
+				fmt.Printf("%s\n", ipNet.String())
+			}
 		}
 	}
 
@@ -245,7 +296,7 @@ func outputCSV(agents []Agent) {
 	agents = addSubnetsToAgents(agents)
 
 	for _, agent := range agents {
-		fmt.Printf("%s;%s;%s;%s;%s;", strconv.Itoa(agent.AgentID), agent.AgentName, agent.AgentType, agent.Location, agent.CountryID)
+		fmt.Printf("%s%s%s%s%s%s%s%s%s%s", strconv.Itoa(agent.AgentID), CSVSeparatorChar, agent.AgentName, CSVSeparatorChar, agent.AgentType, CSVSeparatorChar, agent.Location, CSVSeparatorChar, agent.CountryID, CSVSeparatorChar)
 
 		ipStr := ""
 		if len(agent.IPv4Addresses) > 0 {
@@ -254,7 +305,7 @@ func outputCSV(agents []Agent) {
 			}
 			ipStr = ipStr[0 : len(ipStr)-1]
 		}
-		fmt.Printf("%s;", ipStr)
+		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
 		ipStr = ""
 		if len(agent.IPv4SubnetsStrict) > 0 {
 			for _, ipNet := range agent.IPv4SubnetsStrict {
@@ -267,7 +318,7 @@ func outputCSV(agents []Agent) {
 			}
 			ipStr = ipStr[0 : len(ipStr)-1]
 		}
-		fmt.Printf("%s;", ipStr)
+		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
 		ipStr = ""
 		if len(agent.IPv4SubnetsLoose) > 0 {
 			for _, ipNet := range agent.IPv4SubnetsLoose {
@@ -280,7 +331,7 @@ func outputCSV(agents []Agent) {
 			}
 			ipStr = ipStr[0 : len(ipStr)-1]
 		}
-		fmt.Printf("%s;", ipStr)
+		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
 		ipStr = ""
 		if len(agent.IPv6Addresses) > 0 {
 			for _, ip := range agent.IPv6Addresses {
@@ -288,7 +339,7 @@ func outputCSV(agents []Agent) {
 			}
 			ipStr = ipStr[0 : len(ipStr)-1]
 		}
-		fmt.Printf("%s;", ipStr)
+		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
 		ipStr = ""
 		if len(agent.IPv6SubnetsStrict) > 0 {
 			for _, ipNet := range agent.IPv6SubnetsStrict {
@@ -301,7 +352,7 @@ func outputCSV(agents []Agent) {
 			}
 			ipStr = ipStr[0 : len(ipStr)-1]
 		}
-		fmt.Printf("%s;", ipStr)
+		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
 		ipStr = ""
 		if len(agent.IPv6SubnetsLoose) > 0 {
 			for _, ipNet := range agent.IPv6SubnetsLoose {
@@ -314,7 +365,7 @@ func outputCSV(agents []Agent) {
 			}
 			ipStr = ipStr[0 : len(ipStr)-1]
 		}
-		fmt.Printf("%s;", ipStr)
+		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
 
 		fmt.Printf("\n")
 	}
@@ -674,6 +725,67 @@ func ipsToSubnetsLoose(ips []net.IP) []net.IPNet {
 
 	return ipNets
 
+}
+
+// Returns all agents that have provided IP address
+func getAgentsByIP(agents []Agent, ip net.IP) []Agent {
+	returnAgents := []Agent{}
+
+	for _, agent := range agents {
+		if len(agent.IPv4Addresses) > 0 && ip.To4() != nil {
+			for _, aip := range agent.IPv4Addresses {
+				if bytes.Compare(ip, aip) == 0 {
+					returnAgents = append(returnAgents, agent)
+					break
+				}
+			}
+		} else if len(agent.IPv6Addresses) > 0 && ip.To4() == nil {
+			for _, aip := range agent.IPv6Addresses {
+				if bytes.Compare(ip, aip) == 0 {
+					returnAgents = append(returnAgents, agent)
+					break
+				}
+			}
+		}
+	}
+
+	return returnAgents
+}
+
+// Returns all agents that have an IP inside provided subnet
+func getAgentsBySubnet(agents []Agent, ipNet net.IPNet) []Agent {
+	returnAgents := []Agent{}
+
+	for _, agent := range agents {
+		if len(agent.IPv4Addresses) > 0 && ipNet.IP.To4() != nil {
+			for _, aip := range agent.IPv4Addresses {
+				if ipNet.Contains(aip) {
+					returnAgents = append(returnAgents, agent)
+					break
+				}
+			}
+		} else if len(agent.IPv6Addresses) > 0 && ipNet.IP.To4() == nil {
+			for _, aip := range agent.IPv6Addresses {
+				if ipNet.Contains(aip) {
+					returnAgents = append(returnAgents, agent)
+					break
+				}
+			}
+		}
+	}
+
+	return returnAgents
+}
+
+func pad(str string, totalLen int) string {
+	var padLen int
+	if len(str) < totalLen {
+		padLen = totalLen - len(str)
+	}
+	for x := 0; x < padLen; x++ {
+		str = str + " "
+	}
+	return str
 }
 
 // Logger
