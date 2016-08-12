@@ -66,7 +66,15 @@ func main() {
 	flag.Parse()
 
 	if *version == true {
-		fmt.Printf("ThousandEyes Agent IP List v%s (%s/%s)\n\n", Ver, runtime.GOOS, runtime.GOARCH)
+		fmt.Printf("\nThousandEyes Agent IP List v%s (%s/%s)\n\n", Ver, runtime.GOOS, runtime.GOARCH)
+		os.Exit(0)
+	}
+
+	if *user == "" && *token == "" {
+		fmt.Printf("\nThousandEyes Agent IP List v%s (%s/%s)\n\n", Ver, runtime.GOOS, runtime.GOARCH)
+		fmt.Printf("Usage:\n  %s -u <user> -t <user-api-token>\n\nHelp:\n", os.Args[0])
+		flag.PrintDefaults()
+		fmt.Printf("\n")
 		os.Exit(0)
 	}
 
