@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	Ver               = "0.3"
+	Ver               = "0.4"
 	ApiUrl            = "https://api.thousandeyes.com/agents.json"
 	IPList            = "ip"
 	SubnetListStrict  = "subnet-strict"
@@ -162,10 +162,18 @@ func fetchAgents(user string, token string, enterprise bool, cloud bool, ipv4 bo
 
 	if response.StatusCode == http.StatusOK {
 		// yupepeeee
+	} else if response.StatusCode == http.StatusUnauthorized {
+		log.Error("Invalid credentials provided. (401)")
+	} else if response.StatusCode == http.StatusForbidden {
+		log.Error("Your account does not have permissions to view Agents. (403)")
 	} else if response.StatusCode == http.StatusTooManyRequests {
-		// handle it
+		log.Error("Your are issuing to many API calls. Try again in a minute. (429)")
+	} else if response.StatusCode == http.StatusInternalServerError {
+		log.Error("ThousandEyes API internal server error. Try again later. (500)")
+	} else if response.StatusCode == http.StatusServiceUnavailable {
+		log.Error("ThousandEyes API us under maintenance. Try again later. (503)")
 	} else {
-		log.Error("TE API HTTP error: %s (%s)", response.Status, response.StatusCode)
+		log.Error("ThousandEyes API HTTP error: %s", response.Status)
 	}
 
 	err = json.NewDecoder(response.Body).Decode(&agents)
