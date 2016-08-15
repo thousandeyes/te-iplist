@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"encoding/xml"
 	"flag"
@@ -19,11 +20,15 @@ import (
 )
 
 const (
-	Ver               = "0.4"
+	Ver               = "0.5"
 	ApiUrl            = "https://api.thousandeyes.com/agents.json"
 	IPList            = "ip"
 	SubnetListStrict  = "subnet-strict"
 	SubnetListLoose   = "subnet-loose"
+	IPRangeListStrict = "range-strict"
+	IPRangeListLoose  = "range-loose"
+	IPBlockListStrict = "block-strict"
+	IPBlockListLoose  = "block-loose"
 	CSV               = "csv"
 	JSON              = "json"
 	XML               = "xml"
@@ -37,32 +42,42 @@ const (
 var log = new(Log)
 
 type Agent struct {
+	// Imported from input JSON
 	AgentID           int      `json:"agentId"`
 	AgentName         string   `json:"agentName"`
 	AgentType         string   `json:"agentType"`
 	Location          string   `json:"location"`
 	CountryID         string   `json:"countryId"`
 	IPAddresses       []string `json:"ipAddresses"`
+	// Generated
 	IPv4Addresses     []net.IP
 	IPv6Addresses     []net.IP
 	IPv4SubnetsStrict []net.IPNet
 	IPv6SubnetsStrict []net.IPNet
 	IPv4SubnetsLoose  []net.IPNet
 	IPv6SubnetsLoose  []net.IPNet
+	IPv4RangesStrict []IPRange
+	IPv6RangesStrict []IPRange
+	IPv4RangesLoose  []IPRange
+	IPv6RangesLoose  []IPRange
+	IPv4BlocksStrict []IPBlock
+	IPv6BlocksStrict []IPBlock
+	IPv4BlocksLoose  []IPBlock
+	IPv6BlocksLoose  []IPBlock
 }
 
 func main() {
 
 	// Flags
 	version := flag.Bool("v", false, "Prints out version")
-	output := flag.String("o", SubnetListStrict, "Output type ("+IPList+", "+SubnetListStrict+", "+SubnetListLoose+", "+CSV+", "+JSON+", "+XML+")")
+	output := flag.String("o", SubnetListStrict, "Output type ("+IPList+", "+SubnetListStrict+", "+SubnetListLoose+", "+IPRangeListStrict+", "+IPRangeListLoose+", "+IPBlockListStrict+", "+IPBlockListLoose+", "+CSV+", "+JSON+", "+XML+")")
 	user := flag.String("u", "", "ThousandEyes user")
 	token := flag.String("t", "", "ThousandEyes user API token")
 	i4 := flag.Bool("4", false, "Display only IPv4 addresses")
 	i6 := flag.Bool("6", false, "Display only IPv6 addresses")
 	ea := flag.Bool("e", false, "Display only Enterprise Agent addresses")
 	ca := flag.Bool("c", false, "Display only Cloud Agent addresses")
-	name := flag.Bool("n", false, "Add Agent name as a comment to "+IPList+", "+SubnetListStrict+" and "+SubnetListLoose+" output types.")
+	name := flag.Bool("n", false, "Add Agent name as a comment to "+IPList+", "+SubnetListStrict+", "+SubnetListLoose+", "+IPRangeListStrict+", "+IPRangeListLoose+", "+IPBlockListStrict+" and "+IPBlockListLoose+" output types.")
 	flag.Parse()
 
 	if *version == true {
@@ -120,6 +135,14 @@ func main() {
 		outputSubnetListStrict(agents, *name)
 	} else if strings.ToLower(*output) == SubnetListLoose {
 		outputSubnetListLoose(agents, *name)
+	} else if strings.ToLower(*output) == IPRangeListStrict {
+		outputIPRangeListStrict(agents, *name)
+	} else if strings.ToLower(*output) == IPRangeListLoose {
+		outputIPRangeListLoose(agents, *name)
+	} else if strings.ToLower(*output) == IPBlockListStrict {
+		outputIPBlockListStrict(agents, *name)
+	} else if strings.ToLower(*output) == IPBlockListLoose {
+		outputIPBlockListLoose(agents, *name)
 	} else if strings.ToLower(*output) == CSV {
 		outputCSV(agents)
 	} else if strings.ToLower(*output) == JSON {
@@ -127,7 +150,7 @@ func main() {
 	} else if strings.ToLower(*output) == XML {
 		outputXML(agents)
 	} else {
-		log.Error("Output type '%s' not supported. Supported output types: %s, %s, %s, %s", *output, IPList, CSV, JSON, XML)
+		log.Error("Output type '%s' not supported. Supported output types: %s, %s, %s, %s, %s, %s, %s", *output, IPList, SubnetListStrict, SubnetListLoose, IPRangeListStrict, CSV, JSON, XML)
 		os.Exit(0)
 	}
 
@@ -172,16 +195,22 @@ func fetchAgents(user string, token string, enterprise bool, cloud bool, ipv4 bo
 		// yupepeeee
 	} else if response.StatusCode == http.StatusUnauthorized {
 		log.Error("Invalid credentials provided. (401)")
+		os.Exit(0)
 	} else if response.StatusCode == http.StatusForbidden {
 		log.Error("Your account does not have permissions to view Agents. (403)")
+		os.Exit(0)
 	} else if response.StatusCode == http.StatusTooManyRequests {
 		log.Error("Your are issuing to many API calls. Try again in a minute. (429)")
+		os.Exit(0)
 	} else if response.StatusCode == http.StatusInternalServerError {
 		log.Error("ThousandEyes API internal server error. Try again later. (500)")
+		os.Exit(0)
 	} else if response.StatusCode == http.StatusServiceUnavailable {
 		log.Error("ThousandEyes API us under maintenance. Try again later. (503)")
+		os.Exit(0)
 	} else {
 		log.Error("ThousandEyes API HTTP error: %s", response.Status)
+		os.Exit(0)
 	}
 
 	err = json.NewDecoder(response.Body).Decode(&agents)
@@ -305,11 +334,214 @@ func outputSubnetListLoose(agents []Agent, name bool) {
 
 }
 
+type IPRange struct {
+	StartIP net.IP
+	EndIP   net.IP
+}
+func (ipRange IPRange) Contains(ip net.IP) bool {
+	if ip.To4() != nil && ipRange.StartIP.To4() != nil && ipRange.EndIP.To4() != nil {
+		// IPv4
+		if binary.BigEndian.Uint32(ip.To4()) >= binary.BigEndian.Uint32(ipRange.StartIP.To4()) && binary.BigEndian.Uint32(ip.To4()) <= binary.BigEndian.Uint32(ipRange.EndIP.To4()) {
+			return true
+		}
+	} else if ip.To4() == nil && ipRange.StartIP.To4() == nil && ipRange.EndIP.To4() == nil {
+		// IPv6
+		if binary.BigEndian.Uint64(ip[0:8]) > binary.BigEndian.Uint64(ipRange.StartIP[0:8]) && binary.BigEndian.Uint64(ip[0:8]) < binary.BigEndian.Uint64(ipRange.EndIP[0:8]) {
+		  return true
+		} else if bytes.Compare(ip[0:8], ipRange.StartIP[0:8]) == 0 && binary.BigEndian.Uint64(ip[0:8]) < binary.BigEndian.Uint64(ipRange.EndIP[0:8]) &&
+		          binary.BigEndian.Uint64(ip[8:16]) >= binary.BigEndian.Uint64(ipRange.StartIP[8:16]) {
+		  return true
+		} else if binary.BigEndian.Uint64(ip[0:8]) > binary.BigEndian.Uint64(ipRange.StartIP[0:8]) && bytes.Compare(ip[0:8], ipRange.EndIP[0:8]) == 0 &&
+		          binary.BigEndian.Uint64(ip[8:16]) <= binary.BigEndian.Uint64(ipRange.EndIP[8:16]) {
+		  return true
+		} else if bytes.Compare(ip[0:8], ipRange.StartIP[0:8]) == 0 && bytes.Compare(ip[0:8], ipRange.EndIP[0:8]) == 0 &&
+		          binary.BigEndian.Uint64(ip[8:16]) >= binary.BigEndian.Uint64(ipRange.StartIP[8:16]) && binary.BigEndian.Uint64(ip[8:16]) <= binary.BigEndian.Uint64(ipRange.EndIP[8:16]) {
+		  return true
+		}
+	}
+	return false
+}
+func (ipRange IPRange) String() string {
+	if bytes.Compare(ipRange.StartIP, ipRange.EndIP) != 0 {
+		return ipRange.StartIP.String()+" - "+ipRange.EndIP.String()
+	} else {
+		return ipRange.StartIP.String()
+	}
+}
+
+func outputIPRangeListStrict(agents []Agent, name bool) {
+
+	ips := sortAgentIPs(agents)
+	ipRanges := ipsToIPRangesStrict(ips)
+
+		for _, ipRange := range ipRanges {
+			if name {
+				agentsWithIP := getAgentsByIPRange(agents, ipRange)
+				agentsStr := ""
+				for _, agent := range agentsWithIP {
+					agentsStr = agentsStr + ListSeparatorChar + " " + agent.AgentName
+				}
+				if len(agentsStr) > 1 {
+					agentsStr = agentsStr[2:]
+				}
+				fmt.Printf("%s %s %s\n", pad(ipRange.String(), 59), ListCommentChar, agentsStr)
+			} else {
+				fmt.Printf("%s\n", ipRange.String())
+			}
+		}
+
+}
+
+func outputIPRangeListLoose(agents []Agent, name bool) {
+
+	ips := sortAgentIPs(agents)
+	ipRanges := ipsToIPRangesLoose(ips)
+
+		for _, ipRange := range ipRanges {
+			if name {
+				agentsWithIP := getAgentsByIPRange(agents, ipRange)
+				agentsStr := ""
+				for _, agent := range agentsWithIP {
+					agentsStr = agentsStr + ListSeparatorChar + " " + agent.AgentName
+				}
+				if len(agentsStr) > 1 {
+					agentsStr = agentsStr[2:]
+				}
+				fmt.Printf("%s %s %s\n", pad(ipRange.String(), 59), ListCommentChar, agentsStr)
+			} else {
+				fmt.Printf("%s\n", ipRange.String())
+			}
+		}
+
+}
+
+type IPBlock struct {
+	StartIP net.IP
+	EndIP   net.IP
+}
+func (ipBlock IPBlock) Contains(ip net.IP) bool {
+	if ip.To4() != nil && ipBlock.StartIP.To4() != nil && ipBlock.EndIP.To4() != nil {
+		if binary.BigEndian.Uint32(ip.To4()) >= binary.BigEndian.Uint32(ipBlock.StartIP.To4()) && binary.BigEndian.Uint32(ip.To4()) <= binary.BigEndian.Uint32(ipBlock.EndIP.To4()) {
+			return true
+		}
+	} else if ip.To4() == nil && ipBlock.StartIP.To4() == nil && ipBlock.EndIP.To4() == nil {
+		if binary.BigEndian.Uint64(ip[0:8]) > binary.BigEndian.Uint64(ipBlock.StartIP[0:8]) && binary.BigEndian.Uint64(ip[0:8]) < binary.BigEndian.Uint64(ipBlock.EndIP[0:8]) {
+		  return true
+		} else if bytes.Compare(ip[0:8], ipBlock.StartIP[0:8]) == 0 && binary.BigEndian.Uint64(ip[0:8]) < binary.BigEndian.Uint64(ipBlock.EndIP[0:8]) &&
+		          binary.BigEndian.Uint64(ip[8:16]) >= binary.BigEndian.Uint64(ipBlock.StartIP[8:16]) {
+		  return true
+		} else if binary.BigEndian.Uint64(ip[0:8]) > binary.BigEndian.Uint64(ipBlock.StartIP[0:8]) && bytes.Compare(ip[0:8], ipBlock.EndIP[0:8]) == 0 &&
+		          binary.BigEndian.Uint64(ip[8:16]) <= binary.BigEndian.Uint64(ipBlock.EndIP[8:16]) {
+		  return true
+		} else if bytes.Compare(ip[0:8], ipBlock.StartIP[0:8]) == 0 && bytes.Compare(ip[0:8], ipBlock.EndIP[0:8]) == 0 &&
+		          binary.BigEndian.Uint64(ip[8:16]) >= binary.BigEndian.Uint64(ipBlock.StartIP[8:16]) && binary.BigEndian.Uint64(ip[8:16]) <= binary.BigEndian.Uint64(ipBlock.EndIP[8:16]) {
+		  return true
+		}
+	}
+	return false
+}
+func (ipBlock IPBlock) String() string {
+	start4 := ipBlock.StartIP.To4()
+	end4 := ipBlock.EndIP.To4()
+	if start4 != nil && end4 != nil {
+		// IPv4
+		if bytes.Compare(ipBlock.StartIP, ipBlock.EndIP) == 0 {
+			return ipBlock.StartIP.String()
+		} else if start4[3] != end4[3] {
+			return strconv.Itoa(int(start4[0]))+"."+strconv.Itoa(int(start4[1]))+"."+strconv.Itoa(int(start4[2]))+".["+strconv.Itoa(int(start4[3]))+"-"+strconv.Itoa(int(end4[3]))+"]"
+		} else if start4[2] != end4[2] {
+			return strconv.Itoa(int(start4[0]))+"."+strconv.Itoa(int(start4[1]))+".["+strconv.Itoa(int(start4[2]))+"-"+strconv.Itoa(int(end4[2]))+"]."+strconv.Itoa(int(start4[3]))
+		}
+	} else {
+		// IPv6
+		if bytes.Compare(ipBlock.StartIP, ipBlock.EndIP) == 0 {
+			return ipBlock.StartIP.String()
+		} else {
+			first64 := fmt.Sprintf("%x", binary.BigEndian.Uint16(ipBlock.StartIP[0:2]))+":"+fmt.Sprintf("%x", binary.BigEndian.Uint16(ipBlock.StartIP[2:4]))+":"+
+								 fmt.Sprintf("%x", binary.BigEndian.Uint16(ipBlock.StartIP[4:6]))+":"+fmt.Sprintf("%x", binary.BigEndian.Uint16(ipBlock.StartIP[6:8]))+":"
+			start64 := fmt.Sprintf("%x", binary.BigEndian.Uint16(ipBlock.StartIP[8:10]))+":"+fmt.Sprintf("%x", binary.BigEndian.Uint16(ipBlock.StartIP[10:12]))+":"+
+								 fmt.Sprintf("%x", binary.BigEndian.Uint16(ipBlock.StartIP[12:14]))+":"+fmt.Sprintf("%x", binary.BigEndian.Uint16(ipBlock.StartIP[14:16]))
+			end64 := fmt.Sprintf("%x", binary.BigEndian.Uint16(ipBlock.EndIP[8:10]))+":"+fmt.Sprintf("%x", binary.BigEndian.Uint16(ipBlock.EndIP[10:12]))+":"+
+							 fmt.Sprintf("%x", binary.BigEndian.Uint16(ipBlock.EndIP[12:14]))+":"+fmt.Sprintf("%x", binary.BigEndian.Uint16(ipBlock.EndIP[14:16]))
+			// Shorten IPv6
+			if !strings.Contains(first64, "::") {
+				// Go will shorten IP, lets just generate a complete IP
+				fakePrefix := "1:2:3:4:"
+				fakeStartIPStr := fakePrefix + start64
+				fakeEndIPStr := fakePrefix + end64
+				fakeStartIP := net.ParseIP(fakeStartIPStr)
+				fakeEndIP := net.ParseIP(fakeEndIPStr)
+				fakeStartIPStr = fakeStartIP.String()
+				fakeEndIPStr = fakeEndIP.String()
+				start64 = fakeStartIPStr[len(fakePrefix):]
+				end64 = fakeEndIPStr[len(fakePrefix):]
+			}
+			if len(start64) > 1 && len(end64) > 1 && start64[0:1] == ":" && end64[0:1] == ":" && start64[0:2] != "::" && end64[0:2] != "::" {
+				return first64+":["+start64[1:]+"-"+end64[1:]+"]"
+			} else if start64[:1] == ":" || end64[:1] == ":" {
+				return first64[:len(first64)-1]+"[:"+start64+"-:"+end64+"]"
+			} else {
+				return first64+"["+start64+"-"+end64+"]"
+			}
+		}
+	}
+	return ipBlock.StartIP.String()
+}
+
+func outputIPBlockListStrict(agents []Agent, name bool) {
+
+	ips := sortAgentIPs(agents)
+	ipBlocks := ipsToIPBlocksStrict(ips)
+
+	for _, ipBlock := range ipBlocks {
+		if name {
+			agentsWithIP := getAgentsByIPBlock(agents, ipBlock)
+			agentsStr := ""
+			for _, agent := range agentsWithIP {
+				agentsStr = agentsStr + ListSeparatorChar + " " + agent.AgentName
+			}
+			if len(agentsStr) > 1 {
+				agentsStr = agentsStr[2:]
+			}
+			fmt.Printf("%s %s %s\n", pad(ipBlock.String(), 46), ListCommentChar, agentsStr)
+		} else {
+			fmt.Printf("%s\n", pad(ipBlock.String(), 46))
+		}
+	}
+
+}
+
+func outputIPBlockListLoose(agents []Agent, name bool) {
+
+	ips := sortAgentIPs(agents)
+	ipBlocks := ipsToIPBlocksLoose(ips)
+
+	for _, ipBlock := range ipBlocks {
+		if name {
+			agentsWithIP := getAgentsByIPBlock(agents, ipBlock)
+			agentsStr := ""
+			for _, agent := range agentsWithIP {
+				agentsStr = agentsStr + ListSeparatorChar + " " + agent.AgentName
+			}
+			if len(agentsStr) > 1 {
+				agentsStr = agentsStr[2:]
+			}
+			fmt.Printf("%s %s %s\n", pad(ipBlock.String(), 46), ListCommentChar, agentsStr)
+		} else {
+			fmt.Printf("%s\n", pad(ipBlock.String(), 46))
+		}
+	}
+
+}
+
+
 func outputCSV(agents []Agent) {
 
-	fmt.Printf("Agent ID;Agent Name;Agent Type;Location;Country;IPv4 Addresses;IPv4 Subnets (Strict);IPv4 Subnets (Loose);IPv6 Addresses;IPv6 Subnets (Strict);IPv6 Subnets (Loose)\n")
+	fmt.Printf("Agent ID;Agent Name;Agent Type;Location;Country;")
+	fmt.Printf("IPv4 Addresses;IPv4 Subnets (Strict);IPv4 Subnets (Loose);IPv4 Ranges (Strict);IPv4 Ranges (Loose);IPv4 Blocks (Strict);IPv4 Blocks (Loose);")
+	fmt.Printf("IPv6 Addresses;IPv6 Subnets (Strict);IPv6 Subnets (Loose);IPv6 Ranges (Strict);IPv6 Ranges (Loose);IPv6 Blocks (Strict);IPv6 Blocks (Loose);\n")
 
-	agents = addSubnetsToAgents(agents)
+	agents = addDataToAgents(agents)
 
 	for _, agent := range agents {
 		fmt.Printf("%s%s%s%s%s%s%s%s%s%s", strconv.Itoa(agent.AgentID), CSVSeparatorChar, agent.AgentName, CSVSeparatorChar, agent.AgentType, CSVSeparatorChar, agent.Location, CSVSeparatorChar, agent.CountryID, CSVSeparatorChar)
@@ -349,6 +581,38 @@ func outputCSV(agents []Agent) {
 		}
 		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
 		ipStr = ""
+		if len(agent.IPv4RangesStrict) > 0 {
+			for _, ipRange := range agent.IPv4RangesStrict {
+				ipStr = ipStr + ipRange.String() + ","
+			}
+			ipStr = ipStr[0 : len(ipStr)-1]
+		}
+		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
+		ipStr = ""
+		if len(agent.IPv4RangesLoose) > 0 {
+			for _, ipRange := range agent.IPv4RangesLoose {
+				ipStr = ipStr + ipRange.String() + ","
+			}
+			ipStr = ipStr[0 : len(ipStr)-1]
+		}
+		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
+		ipStr = ""
+		if len(agent.IPv4BlocksStrict) > 0 {
+		  for _, ipBlock := range agent.IPv4BlocksStrict {
+		    ipStr = ipStr + ipBlock.String() + ","
+		  }
+		  ipStr = ipStr[0 : len(ipStr)-1]
+		}
+		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
+		ipStr = ""
+		if len(agent.IPv4BlocksLoose) > 0 {
+		  for _, ipBlock := range agent.IPv4BlocksLoose {
+		    ipStr = ipStr + ipBlock.String() + ","
+		  }
+		  ipStr = ipStr[0 : len(ipStr)-1]
+		}
+		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
+		ipStr = ""
 		if len(agent.IPv6Addresses) > 0 {
 			for _, ip := range agent.IPv6Addresses {
 				ipStr = ipStr + ip.String() + ","
@@ -382,6 +646,38 @@ func outputCSV(agents []Agent) {
 			ipStr = ipStr[0 : len(ipStr)-1]
 		}
 		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
+		ipStr = ""
+		if len(agent.IPv6RangesStrict) > 0 {
+			for _, ipRange := range agent.IPv6RangesStrict {
+				ipStr = ipStr + ipRange.String() + ","
+			}
+			ipStr = ipStr[0 : len(ipStr)-1]
+		}
+		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
+		ipStr = ""
+		if len(agent.IPv6RangesLoose) > 0 {
+			for _, ipRange := range agent.IPv6RangesLoose {
+				ipStr = ipStr + ipRange.String() + ","
+			}
+			ipStr = ipStr[0 : len(ipStr)-1]
+		}
+		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
+		ipStr = ""
+		if len(agent.IPv6BlocksStrict) > 0 {
+		  for _, ipBlock := range agent.IPv6BlocksStrict {
+		    ipStr = ipStr + ipBlock.String() + ","
+		  }
+		  ipStr = ipStr[0 : len(ipStr)-1]
+		}
+		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
+		ipStr = ""
+		if len(agent.IPv6BlocksLoose) > 0 {
+		  for _, ipBlock := range agent.IPv6BlocksLoose {
+		    ipStr = ipStr + ipBlock.String() + ","
+		  }
+		  ipStr = ipStr[0 : len(ipStr)-1]
+		}
+		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
 
 		fmt.Printf("\n")
 	}
@@ -396,16 +692,24 @@ func outputJSON(agents []Agent) {
 		AgentType         string   `json:"agentType"`
 		Location          string   `json:"location"`
 		CountryID         string   `json:"countryId"`
-		IPv4Addresses     []string `json:"ipv4Addresses,omitempty"`
-		IPv6Addresses     []string `json:"ipv6Addresses,omitempty"`
-		IPv4SubnetsStrict []string `json:"ipv4SubnetsStrict,omitempty"`
-		IPv6SubnetsStrict []string `json:"ipv6SubnetsStrict,omitempty"`
-		IPv4SubnetsLoose  []string `json:"ipv4SubnetsLoose,omitempty"`
-		IPv6SubnetsLoose  []string `json:"ipv6SubnetsLoose,omitempty"`
+		IPv4Addresses     []string `json:"ipv4Address,omitempty"`
+		IPv6Addresses     []string `json:"ipv6Address,omitempty"`
+		IPv4SubnetsStrict []string `json:"ipv4SubnetStrict,omitempty"`
+		IPv6SubnetsStrict []string `json:"ipv6SubnetStrict,omitempty"`
+		IPv4SubnetsLoose  []string `json:"ipv4SubnetLoose,omitempty"`
+		IPv6SubnetsLoose  []string `json:"ipv6SubnetLoose,omitempty"`
+		IPv4RangesStrict []string `json:"ipv4RangeStrict,omitempty"`
+		IPv6RangesStrict []string `json:"ipv6RangeStrict,omitempty"`
+		IPv4RangesLoose  []string `json:"ipv4RangeLoose,omitempty"`
+		IPv6RangesLoose  []string `json:"ipv6RangeLoose,omitempty"`
+		IPv4BlocksStrict []string `json:"ipv4BlockStrict,omitempty"`
+		IPv6BlocksStrict []string `json:"ipv6BlockStrict,omitempty"`
+		IPv4BlocksLoose  []string `json:"ipv4BlockLoose,omitempty"`
+		IPv6BlocksLoose  []string `json:"ipv6BlockLoose,omitempty"`
 	}
 
 	outputAgents := []OutputAgent{}
-	agents = addSubnetsToAgents(agents)
+	agents = addDataToAgents(agents)
 
 	for _, agent := range agents {
 		outputAgent := OutputAgent{AgentID: agent.AgentID, AgentName: agent.AgentName, AgentType: agent.AgentType, Location: agent.Location, CountryID: agent.CountryID}
@@ -458,6 +762,46 @@ func outputJSON(agents []Agent) {
 					outputAgent.IPv6SubnetsLoose = append(outputAgent.IPv6SubnetsLoose, ipNet.String())
 				}
 			}
+		}
+		if len(agent.IPv4RangesStrict) > 0 {
+			for _, ipRange := range agent.IPv4RangesStrict {
+				outputAgent.IPv4RangesStrict = append(outputAgent.IPv4RangesStrict, ipRange.String())
+			}
+		}
+		if len(agent.IPv6RangesStrict) > 0 {
+			for _, ipRange := range agent.IPv6RangesStrict {
+				outputAgent.IPv6RangesStrict = append(outputAgent.IPv6RangesStrict, ipRange.String())
+			}
+		}
+		if len(agent.IPv4RangesLoose) > 0 {
+			for _, ipRange := range agent.IPv4RangesLoose {
+				outputAgent.IPv4RangesLoose = append(outputAgent.IPv4RangesLoose, ipRange.String())
+			}
+		}
+		if len(agent.IPv6RangesLoose) > 0 {
+			for _, ipRange := range agent.IPv6RangesLoose {
+				outputAgent.IPv6RangesLoose = append(outputAgent.IPv6RangesLoose, ipRange.String())
+			}
+		}
+		if len(agent.IPv4BlocksStrict) > 0 {
+		  for _, ipBlock := range agent.IPv4BlocksStrict {
+		    outputAgent.IPv4BlocksStrict = append(outputAgent.IPv4BlocksStrict, ipBlock.String())
+		  }
+		}
+		if len(agent.IPv6BlocksStrict) > 0 {
+		  for _, ipBlock := range agent.IPv6BlocksStrict {
+		    outputAgent.IPv6BlocksStrict = append(outputAgent.IPv6BlocksStrict, ipBlock.String())
+		  }
+		}
+		if len(agent.IPv4BlocksLoose) > 0 {
+		  for _, ipBlock := range agent.IPv4BlocksLoose {
+		    outputAgent.IPv4BlocksLoose = append(outputAgent.IPv4BlocksLoose, ipBlock.String())
+		  }
+		}
+		if len(agent.IPv6BlocksLoose) > 0 {
+		  for _, ipBlock := range agent.IPv6BlocksLoose {
+		    outputAgent.IPv6BlocksLoose = append(outputAgent.IPv6BlocksLoose, ipBlock.String())
+		  }
 		}
 		outputAgents = append(outputAgents, outputAgent)
 	}
@@ -481,10 +825,18 @@ func outputXML(agents []Agent) {
 		IPv6SubnetsStrict []string `xml:"ipv6SubnetsStrict,omitempty"`
 		IPv4SubnetsLoose  []string `xml:"ipv4SubnetsLoose,omitempty"`
 		IPv6SubnetsLoose  []string `xml:"ipv6SubnetsLoose,omitempty"`
+		IPv4RangesStrict []string `xml:"ipv4RangesStrict,omitempty"`
+		IPv6RangesStrict []string `xml:"ipv6RangesStrict,omitempty"`
+		IPv4RangesLoose  []string `xml:"ipv4RangesLoose,omitempty"`
+		IPv6RangesLoose  []string `xml:"ipv6RangesLoose,omitempty"`
+		IPv4BlocksStrict []string `xml:"ipv4BlocksStrict,omitempty"`
+		IPv6BlocksStrict []string `xml:"ipv6BlocksStrict,omitempty"`
+		IPv4BlocksLoose  []string `xml:"ipv4BlocksLoose,omitempty"`
+		IPv6BlocksLoose  []string `xml:"ipv6BlocksLoose,omitempty"`
 	}
 
 	outputAgents := []OutputAgent{}
-	agents = addSubnetsToAgents(agents)
+	agents = addDataToAgents(agents)
 
 	for _, agent := range agents {
 		outputAgent := OutputAgent{AgentID: agent.AgentID, AgentName: agent.AgentName, AgentType: agent.AgentType, Location: agent.Location, CountryID: agent.CountryID}
@@ -537,6 +889,46 @@ func outputXML(agents []Agent) {
 					outputAgent.IPv6SubnetsLoose = append(outputAgent.IPv6SubnetsLoose, ipNet.String())
 				}
 			}
+		}
+		if len(agent.IPv4RangesStrict) > 0 {
+			for _, ipRange := range agent.IPv4RangesStrict {
+				outputAgent.IPv4RangesStrict = append(outputAgent.IPv4RangesStrict, ipRange.String())
+			}
+		}
+		if len(agent.IPv6RangesStrict) > 0 {
+			for _, ipRange := range agent.IPv6RangesStrict {
+				outputAgent.IPv6RangesStrict = append(outputAgent.IPv6RangesStrict, ipRange.String())
+			}
+		}
+		if len(agent.IPv4RangesLoose) > 0 {
+			for _, ipRange := range agent.IPv4RangesLoose {
+				outputAgent.IPv4RangesLoose = append(outputAgent.IPv4RangesLoose, ipRange.String())
+			}
+		}
+		if len(agent.IPv6RangesLoose) > 0 {
+			for _, ipRange := range agent.IPv6RangesLoose {
+				outputAgent.IPv6RangesLoose = append(outputAgent.IPv6RangesLoose, ipRange.String())
+			}
+		}
+		if len(agent.IPv4BlocksStrict) > 0 {
+		  for _, ipBlock := range agent.IPv4BlocksStrict {
+		    outputAgent.IPv4BlocksStrict = append(outputAgent.IPv4BlocksStrict, ipBlock.String())
+		  }
+		}
+		if len(agent.IPv6BlocksStrict) > 0 {
+		  for _, ipBlock := range agent.IPv6BlocksStrict {
+		    outputAgent.IPv6BlocksStrict = append(outputAgent.IPv6BlocksStrict, ipBlock.String())
+		  }
+		}
+		if len(agent.IPv4BlocksLoose) > 0 {
+		  for _, ipBlock := range agent.IPv4BlocksLoose {
+		    outputAgent.IPv4BlocksLoose = append(outputAgent.IPv4BlocksLoose, ipBlock.String())
+		  }
+		}
+		if len(agent.IPv6BlocksLoose) > 0 {
+		  for _, ipBlock := range agent.IPv6BlocksLoose {
+		    outputAgent.IPv6BlocksLoose = append(outputAgent.IPv6BlocksLoose, ipBlock.String())
+		  }
 		}
 		outputAgents = append(outputAgents, outputAgent)
 	}
@@ -573,16 +965,26 @@ func sortAgentIPs(agents []Agent) []net.IP {
 
 }
 
-func addSubnetsToAgents(agents []Agent) []Agent {
+func addDataToAgents(agents []Agent) []Agent {
 
 	for i, agent := range agents {
 		if len(agent.IPv4Addresses) > 0 {
-			agents[i].IPv4SubnetsStrict = ipsToSubnetsStrict(agent.IPv4Addresses)
-			agents[i].IPv4SubnetsLoose = ipsToSubnetsLoose(agent.IPv4Addresses)
+			ips := sortIPs(agent.IPv4Addresses)
+			agents[i].IPv4SubnetsStrict = ipsToSubnetsStrict(ips)
+			agents[i].IPv4SubnetsLoose = ipsToSubnetsLoose(ips)
+			agents[i].IPv4RangesStrict = ipsToIPRangesStrict(ips)
+			agents[i].IPv4RangesLoose = ipsToIPRangesLoose(ips)
+			agents[i].IPv4BlocksStrict = ipsToIPBlocksStrict(ips)
+			agents[i].IPv4BlocksLoose = ipsToIPBlocksLoose(ips)
 		}
 		if len(agent.IPv6Addresses) > 0 {
-			agents[i].IPv6SubnetsStrict = ipsToSubnetsStrict(agent.IPv6Addresses)
-			agents[i].IPv6SubnetsLoose = ipsToSubnetsLoose(agent.IPv6Addresses)
+			ips := sortIPs(agent.IPv6Addresses)
+			agents[i].IPv6SubnetsStrict = ipsToSubnetsStrict(ips)
+			agents[i].IPv6SubnetsLoose = ipsToSubnetsLoose(ips)
+			agents[i].IPv6RangesStrict = ipsToIPRangesStrict(ips)
+			agents[i].IPv6RangesLoose = ipsToIPRangesLoose(ips)
+			agents[i].IPv6BlocksStrict = ipsToIPBlocksStrict(ips)
+			agents[i].IPv6BlocksLoose = ipsToIPBlocksLoose(ips)
 		}
 	}
 
@@ -608,8 +1010,25 @@ func sortIPs(ips []net.IP) []net.IP {
 
 }
 
+// Returns true if IPs are sorted by sortIPs()
+func ipsSorted(ips []net.IP) bool {
+
+	for i, ip := range ips {
+		if i+1 < len(ips) && binary.BigEndian.Uint64(ip[0:8]) > binary.BigEndian.Uint64(ips[i+1][0:8]) {
+			return false
+		}
+		if i+1 < len(ips) && binary.BigEndian.Uint64(ip[8:16]) > binary.BigEndian.Uint64(ips[i+1][8:16]) {
+			return false
+		}
+	}
+
+	return true
+
+}
+
 // Transform a list of IPs to a list of subnets that exactly match the list of
 // IPs
+// ips []net.IP MUST be sorted by sortIPs()
 func ipsToSubnetsStrict(ips []net.IP) []net.IPNet {
 
 	ipNets := []net.IPNet{}
@@ -662,6 +1081,7 @@ func ipsToSubnetsStrict(ips []net.IP) []net.IPNet {
 // Transform a list of IPs to a minimal list of /24 or longer subnets that
 // covers all the input IPs but also some of the IPs that are not on the input
 // list
+// ips []net.IP MUST be sorted by sortIPs()
 func ipsToSubnetsLoose(ips []net.IP) []net.IPNet {
 
 	ipNets := []net.IPNet{}
@@ -743,6 +1163,233 @@ func ipsToSubnetsLoose(ips []net.IP) []net.IPNet {
 
 }
 
+// Transform a list of IPs to a strict list of IP ranges, i.e. 10.0.0.3 - 10.0.0.5
+// ips []net.IP MUST be sorted by sortIPs()
+func ipsToIPRangesStrict(ips []net.IP) []IPRange {
+
+	ipRanges := []IPRange{}
+
+	if len(ips) == 0 {
+		return ipRanges
+	} else if len(ips) == 1 {
+		ipRanges = append(ipRanges, IPRange{ips[0], ips[0]})
+		return ipRanges
+	}
+
+	iAlreadyCovered := -1
+	for i, ip := range ips {
+		if i <= iAlreadyCovered {
+			continue
+		}
+
+		ipRange := IPRange{ip, ip}
+
+		if ip.To4() != nil {
+			// IPv4
+			for n := 1; n < len(ips)-i; n++ {
+				if ips[i+n].To4() != nil && binary.BigEndian.Uint32(ips[i+n].To4()) == binary.BigEndian.Uint32(ip.To4())+uint32(n) {
+					ipRange.EndIP = ips[i+n]
+					iAlreadyCovered = i + n
+				} else {
+					break
+				}
+			}
+			ipRanges = append(ipRanges, ipRange)
+		} else {
+			// IPv6
+			for n := 1; n < len(ips)-i; n++ {
+				// First 64 bits have to be equal, last 64 bits must be one after another
+				if ips[i+n].To4() == nil && bytes.Compare(ips[i+n][0:8], ip[0:8]) == 0 && binary.BigEndian.Uint64(ips[i+n][8:16]) == binary.BigEndian.Uint64(ip[8:16])+uint64(n) {
+					ipRange.EndIP = ips[i+n]
+					iAlreadyCovered = i + n
+				} else {
+					break
+				}
+			}
+			ipRanges = append(ipRanges, ipRange)
+		}
+	}
+
+	return ipRanges
+
+}
+
+// Transform a list of IPs to a loose list of IP ranges, i.e.
+// 10.0.0.3, 10.0.0.5 -> 10.0.0.3 - 10.0.0.5
+// ips []net.IP MUST be sorted by sortIPs()
+func ipsToIPRangesLoose(ips []net.IP) []IPRange {
+
+	ipRanges := []IPRange{}
+
+	if len(ips) == 0 {
+		return ipRanges
+	} else if len(ips) == 1 {
+		ipRanges = append(ipRanges, IPRange{ips[0], ips[0]})
+		return ipRanges
+	}
+
+	iAlreadyCovered := -1
+	for i, ip := range ips {
+		if i <= iAlreadyCovered {
+			continue
+		}
+
+		ipRange := IPRange{ip, ip}
+
+		if ip.To4() != nil {
+			// IPv4
+			for n := 1; n < len(ips)-i; n++ {
+				// IPs that are less than 255 apart are joined in a range
+				if ips[i+n].To4() != nil && binary.BigEndian.Uint32(ips[i+n].To4()) - binary.BigEndian.Uint32(ip.To4()) < uint32(n*255) {
+					ipRange.EndIP = ips[i+n]
+					iAlreadyCovered = i + n
+				} else {
+					break
+				}
+			}
+			ipRanges = append(ipRanges, ipRange)
+		} else {
+			// IPv6
+			for n := 1; n < len(ips)-i; n++ {
+				// Put anything in the same /64 subnet to the same range
+				if ips[i+n].To4() == nil && bytes.Compare(ips[i+n][0:8], ip[0:8]) == 0 {
+					ipRange.EndIP = ips[i+n]
+					iAlreadyCovered = i + n
+				} else {
+					break
+				}
+			}
+			ipRanges = append(ipRanges, ipRange)
+		}
+	}
+
+	return ipRanges
+
+}
+
+// Transform a list of IPs to a strict list of IP blocks, i.e.
+// 10.0.0.3, 10.0.0.4 -> 10.0.0.[3-4]
+// 10.0.1.3, 10.0.2.3 -> 10.0.[1-2].3
+// ips []net.IP MUST be sorted by sortIPs()
+func ipsToIPBlocksStrict(ips []net.IP) []IPBlock {
+
+	ipBlocks := []IPBlock{}
+
+	if len(ips) == 0 {
+		return ipBlocks
+	} else if len(ips) == 1 {
+		ipBlocks = append(ipBlocks, IPBlock{ips[0], ips[0]})
+		return ipBlocks
+	}
+
+	iAlreadyCovered := -1
+	for i, ip := range ips {
+		if i <= iAlreadyCovered {
+			continue
+		}
+
+		ipBlock := IPBlock{ip, ip}
+
+		if ip.To4() != nil {
+			ip4 := ip.To4()
+			// IPv4
+			for n := 1; n < len(ips)-i; n++ {
+				ipN := ips[i+n].To4()
+				if ipN != nil && binary.BigEndian.Uint32(ipN) == binary.BigEndian.Uint32(ip4)+uint32(n) {
+					// D part of 2 IPs is continguos
+					ipBlock.EndIP = ips[i+n]
+					iAlreadyCovered = i + n
+				}	else if ipN != nil && uint8(ipN[2]) == uint8(ip4[2])+uint8(n) && ip4[3] == ipN[3]  {
+					// C part of 2 IPs is continguos, D part is equal
+					ipBlock.EndIP = ips[i+n]
+					iAlreadyCovered = i + n
+				} else {
+					break
+				}
+			}
+			ipBlocks = append(ipBlocks, ipBlock)
+		} else {
+			// IPv6
+			for n := 1; n < len(ips)-i; n++ {
+				// First 64 bits have to be equal, last 64 bits must be one after another
+				if ips[i+n].To4() == nil && bytes.Compare(ips[i+n][0:8], ip[0:8]) == 0 && binary.BigEndian.Uint64(ips[i+n][8:16]) == binary.BigEndian.Uint64(ip[8:16])+uint64(n) {
+					ipBlock.EndIP = ips[i+n]
+					iAlreadyCovered = i + n
+				} else {
+					break
+				}
+			}
+			ipBlocks = append(ipBlocks, ipBlock)
+		}
+	}
+
+	return ipBlocks
+
+}
+
+// Transform a list of IPs to a loose list of IP blocks, i.e.
+// 10.0.0.3, 10.0.0.7 -> 10.0.0.[3-7]
+// 10.0.1.3, 10.0.3.3 -> 10.0.[1-3].3
+// ips []net.IP MUST be sorted by sortIPs()
+func ipsToIPBlocksLoose(ips []net.IP) []IPBlock {
+
+	ipBlocks := []IPBlock{}
+
+	if len(ips) == 0 {
+		return ipBlocks
+	} else if len(ips) == 1 {
+		ipBlocks = append(ipBlocks, IPBlock{ips[0], ips[0]})
+		return ipBlocks
+	}
+
+	iAlreadyCovered := -1
+	for i, ip := range ips {
+		if i <= iAlreadyCovered {
+			continue
+		}
+
+		ipBlock := IPBlock{ip, ip}
+
+		if ip.To4() != nil {
+			ip4 := ip.To4()
+			// IPv4
+			for n := 1; n < len(ips)-i; n++ {
+				ipN := ips[i+n].To4()
+				if ipN != nil && ip4[3] != ipN[3] && ip4[0] == ipN[0] && ip4[1] == ipN[1] && ip4[2] == ipN[2] {
+					// D part of 2 IPs different
+					ipBlock.EndIP = ips[i+n]
+					iAlreadyCovered = i + n
+				}	else if ipN != nil && ip4[2] != ipN[2] && ip4[0] == ipN[0] && ip4[1] == ipN[1] && ip4[3] == ipN[3] {
+					// C part of 2 IPs different
+					ipBlock.EndIP = ips[i+n]
+					iAlreadyCovered = i + n
+				} else {
+					break
+				}
+			}
+			ipBlocks = append(ipBlocks, ipBlock)
+		} else {
+			// IPv6
+			for n := 1; n < len(ips)-i; n++ {
+				// First 64 bits have to be equal, last 64 bits must be one after another
+				if ips[i+n].To4() == nil && bytes.Compare(ips[i+n][0:8], ip[0:8]) == 0 {
+					ipBlock.EndIP = ips[i+n]
+					iAlreadyCovered = i + n
+				} else {
+					break
+				}
+			}
+			ipBlocks = append(ipBlocks, ipBlock)
+		}
+	}
+
+	return ipBlocks
+
+}
+
+
+
+
 // Returns all agents that have provided IP address
 func getAgentsByIP(agents []Agent, ip net.IP) []Agent {
 	returnAgents := []Agent{}
@@ -783,6 +1430,66 @@ func getAgentsBySubnet(agents []Agent, ipNet net.IPNet) []Agent {
 		} else if len(agent.IPv6Addresses) > 0 && ipNet.IP.To4() == nil {
 			for _, aip := range agent.IPv6Addresses {
 				if ipNet.Contains(aip) {
+					returnAgents = append(returnAgents, agent)
+					break
+				}
+			}
+		}
+	}
+
+	return returnAgents
+}
+
+// Returns all agents that have an IP inside provided IPRange
+func getAgentsByIPRange(agents []Agent, ipRange IPRange) []Agent {
+	returnAgents := []Agent{}
+
+	for _, agent := range agents {
+		if len(agent.IPv4Addresses) > 0 && ipRange.StartIP.To4() != nil {
+			for _, aip := range agent.IPv4Addresses {
+				if ipRange.Contains(aip) {
+					returnAgents = append(returnAgents, agent)
+					break
+				}
+			}
+		} else if len(agent.IPv6Addresses) > 0 && ipRange.StartIP.To4() == nil {
+			for _, aip := range agent.IPv6Addresses {
+				if ipRange.Contains(aip) {
+					returnAgents = append(returnAgents, agent)
+					break
+				}
+			}
+		}
+	}
+
+	return returnAgents
+}
+
+// Returns all agents that have an IP inside provided ipBlock block
+func getAgentsByIPBlock(agents []Agent, ipBlock IPBlock) []Agent {
+	returnAgents := []Agent{}
+	for _, agent := range agents {
+		if len(agent.IPv4Addresses) > 0 && ipBlock.StartIP.To4() != nil {
+			for _, aip := range agent.IPv4Addresses {
+				if ipBlock.Contains(aip) {
+					returnAgents = append(returnAgents, agent)
+					break
+				}
+				aip4 := aip.To4()
+				sip4 := ipBlock.StartIP.To4()
+				eip4 := ipBlock.EndIP.To4()
+				if aip4 != nil && sip4 != nil && eip4 != nil &&
+				   uint8(aip4[2]) >= uint8(sip4[2]) && uint8(aip4[2]) <= uint8(eip4[2]) && aip[3] == sip4[3] && aip[3] == eip4[3] {
+						// C part of 2 IPv4s is continguos, D part is equal
+					returnAgents = append(returnAgents, agent)
+					break
+				}
+
+
+			}
+		} else if len(agent.IPv6Addresses) > 0 && ipBlock.StartIP.To4() == nil {
+			for _, aip := range agent.IPv6Addresses {
+				if ipBlock.Contains(aip) {
 					returnAgents = append(returnAgents, agent)
 					break
 				}
