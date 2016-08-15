@@ -457,31 +457,42 @@ func (ipBlock IPBlock) String() string {
 		if bytes.Compare(ipBlock.StartIP, ipBlock.EndIP) == 0 {
 			return ipBlock.StartIP.String()
 		} else {
-			first64 := fmt.Sprintf("%x", binary.BigEndian.Uint16(ipBlock.StartIP[0:2]))+":"+fmt.Sprintf("%x", binary.BigEndian.Uint16(ipBlock.StartIP[2:4]))+":"+
-								 fmt.Sprintf("%x", binary.BigEndian.Uint16(ipBlock.StartIP[4:6]))+":"+fmt.Sprintf("%x", binary.BigEndian.Uint16(ipBlock.StartIP[6:8]))+":"
-			start64 := fmt.Sprintf("%x", binary.BigEndian.Uint16(ipBlock.StartIP[8:10]))+":"+fmt.Sprintf("%x", binary.BigEndian.Uint16(ipBlock.StartIP[10:12]))+":"+
-								 fmt.Sprintf("%x", binary.BigEndian.Uint16(ipBlock.StartIP[12:14]))+":"+fmt.Sprintf("%x", binary.BigEndian.Uint16(ipBlock.StartIP[14:16]))
-			end64 := fmt.Sprintf("%x", binary.BigEndian.Uint16(ipBlock.EndIP[8:10]))+":"+fmt.Sprintf("%x", binary.BigEndian.Uint16(ipBlock.EndIP[10:12]))+":"+
-							 fmt.Sprintf("%x", binary.BigEndian.Uint16(ipBlock.EndIP[12:14]))+":"+fmt.Sprintf("%x", binary.BigEndian.Uint16(ipBlock.EndIP[14:16]))
+			var firstStr, startStr, endStr string
+			var firstLen int
+			for b := 0; b <= 14; b = b+2 {
+				if bytes.Compare(ipBlock.StartIP[:b+2], ipBlock.EndIP[:b+2]) == 0 {
+					firstStr =  fmt.Sprintf("%s%x", firstStr, binary.BigEndian.Uint16(ipBlock.StartIP[b:b+2]))+":"
+					firstLen = b+2
+				} else {
+					startStr = fmt.Sprintf("%s%x", startStr, binary.BigEndian.Uint16(ipBlock.StartIP[b:b+2]))+":"
+					endStr =  fmt.Sprintf("%s%x", endStr, binary.BigEndian.Uint16(ipBlock.EndIP[b:b+2]))+":"
+				}
+			}
+			startStr = startStr[:len(startStr)-1]
+			endStr = endStr[:len(endStr)-1]
+
 			// Shorten IPv6
-			if !strings.Contains(first64, "::") {
+			if !strings.Contains(firstStr, "::") {
 				// Go will shorten IP, lets just generate a complete IP
-				fakePrefix := "1:2:3:4:"
-				fakeStartIPStr := fakePrefix + start64
-				fakeEndIPStr := fakePrefix + end64
+				fakePrefix := ""
+				for i := 0; i*2 < firstLen; i++ {
+					fakePrefix = fmt.Sprintf("%s%x:", fakePrefix, i+1)
+				}
+				fakeStartIPStr := fakePrefix + startStr
+				fakeEndIPStr := fakePrefix + endStr
 				fakeStartIP := net.ParseIP(fakeStartIPStr)
 				fakeEndIP := net.ParseIP(fakeEndIPStr)
 				fakeStartIPStr = fakeStartIP.String()
 				fakeEndIPStr = fakeEndIP.String()
-				start64 = fakeStartIPStr[len(fakePrefix):]
-				end64 = fakeEndIPStr[len(fakePrefix):]
+				startStr = fakeStartIPStr[len(fakePrefix):]
+				endStr = fakeEndIPStr[len(fakePrefix):]
 			}
-			if len(start64) > 1 && len(end64) > 1 && start64[0:1] == ":" && end64[0:1] == ":" && start64[0:2] != "::" && end64[0:2] != "::" {
-				return first64+":["+start64[1:]+"-"+end64[1:]+"]"
-			} else if start64[:1] == ":" || end64[:1] == ":" {
-				return first64[:len(first64)-1]+"[:"+start64+"-:"+end64+"]"
+			if len(startStr) > 1 && len(endStr) > 1 && startStr[0:1] == ":" && endStr[0:1] == ":" && startStr[0:2] != "::" && endStr[0:2] != "::" {
+				return firstStr+":["+startStr[1:]+"-"+endStr[1:]+"]"
+			} else if startStr[:1] == ":" || endStr[:1] == ":" {
+				return firstStr[:len(firstStr)-1]+"[:"+startStr+"-:"+endStr+"]"
 			} else {
-				return first64+"["+start64+"-"+end64+"]"
+				return firstStr+"["+startStr+"-"+endStr+"]"
 			}
 		}
 	}
