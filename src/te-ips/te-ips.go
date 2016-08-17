@@ -839,25 +839,26 @@ func outputJSON(agents []Agent) {
 func outputXML(agents []Agent) {
 
 	type OutputAgent struct {
+		XMLName           xml.Name `xml:"agent"`
 		AgentID           int      `xml:"agentId"`
 		AgentName         string   `xml:"agentName"`
 		AgentType         string   `xml:"agentType"`
-		Location          string   `xml:"location"`
-		CountryID         string   `xml:"countryId"`
-		IPv4Addresses     []string `xml:"ipv4Addresses,omitempty"`
-		IPv6Addresses     []string `xml:"ipv6Addresses,omitempty"`
-		IPv4SubnetsStrict []string `xml:"ipv4SubnetsStrict,omitempty"`
-		IPv6SubnetsStrict []string `xml:"ipv6SubnetsStrict,omitempty"`
-		IPv4SubnetsLoose  []string `xml:"ipv4SubnetsLoose,omitempty"`
-		IPv6SubnetsLoose  []string `xml:"ipv6SubnetsLoose,omitempty"`
-		IPv4RangesStrict  []string `xml:"ipv4RangesStrict,omitempty"`
-		IPv6RangesStrict  []string `xml:"ipv6RangesStrict,omitempty"`
-		IPv4RangesLoose   []string `xml:"ipv4RangesLoose,omitempty"`
-		IPv6RangesLoose   []string `xml:"ipv6RangesLoose,omitempty"`
-		IPv4BlocksStrict  []string `xml:"ipv4BlocksStrict,omitempty"`
-		IPv6BlocksStrict  []string `xml:"ipv6BlocksStrict,omitempty"`
-		IPv4BlocksLoose   []string `xml:"ipv4BlocksLoose,omitempty"`
-		IPv6BlocksLoose   []string `xml:"ipv6BlocksLoose,omitempty"`
+		Location          string   `xml:"location,omitempty""`
+		CountryID         string   `xml:"countryId,omitempty""`
+		IPv4Addresses     []string `xml:"ipv4Address,omitempty"`
+		IPv6Addresses     []string `xml:"ipv6Address,omitempty"`
+		IPv4SubnetsStrict []string `xml:"ipv4SubnetStrict,omitempty"`
+		IPv6SubnetsStrict []string `xml:"ipv6SubnetStrict,omitempty"`
+		IPv4SubnetsLoose  []string `xml:"ipv4SubnetLoose,omitempty"`
+		IPv6SubnetsLoose  []string `xml:"ipv6SubnetLoose,omitempty"`
+		IPv4RangesStrict  []string `xml:"ipv4RangeStrict,omitempty"`
+		IPv6RangesStrict  []string `xml:"ipv6RangeStrict,omitempty"`
+		IPv4RangesLoose   []string `xml:"ipv4RangeLoose,omitempty"`
+		IPv6RangesLoose   []string `xml:"ipv6RangeLoose,omitempty"`
+		IPv4BlocksStrict  []string `xml:"ipv4BlockStrict,omitempty"`
+		IPv6BlocksStrict  []string `xml:"ipv6BlockStrict,omitempty"`
+		IPv4BlocksLoose   []string `xml:"ipv4BlockLoose,omitempty"`
+		IPv6BlocksLoose   []string `xml:"ipv6BlockLoose,omitempty"`
 	}
 
 	outputAgents := []OutputAgent{}
@@ -960,6 +961,7 @@ func outputXML(agents []Agent) {
 
 	x, _ := xml.MarshalIndent(outputAgents, "", "  ")
 
+  fmt.Printf("%s", xml.Header)
 	fmt.Printf("%s", string(x))
 }
 
