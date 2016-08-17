@@ -1,7 +1,7 @@
 # te-ips
 _ThousandEyes Agent IP List_
 
-Program that queries ThousandEyes API for the Agents available for your account and outputs Agent IPs in different forms (IP list, subnet list, IP range list, IP block list) and formats (plain text, CSV, JSON, XML).
+CLI utility that queries ThousandEyes API for the Agents available for your account and outputs Agent IPs in different forms (IP list, subnet list, IP range list, IP block list) and formats (plain text, CSV, JSON, XML).
 
 ## Download
 
@@ -19,15 +19,13 @@ chmod +x te-ips
 
 ## Usage
 
-You need to be in possession of a valid ThousandEyes account to use this program.
+You need to be in possession of a valid ThousandEyes account to use this utility.
 
 ```
 te-ips -u <user> -t <user-api-token>
 ```
 
 ### Output formats
-
-Output type (ip, subnet-strict, subnet-loose, range-strict, range-loose, block-strict, block-loose, csv, json, xml) (default "subnet-strict")
 
 #### -o ip
 List of Agent IP addresses.
