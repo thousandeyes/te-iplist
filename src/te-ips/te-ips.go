@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	Ver               = "0.5"
+	Ver               = "0.6"
 	ApiUrl            = "https://api.thousandeyes.com/agents.json"
 	IPList            = "ip"
 	SubnetListStrict  = "subnet-strict"
@@ -36,7 +36,7 @@ const (
 	Cloud             = "Cloud"
 	ListCommentChar   = "#"
 	ListSeparatorChar = ";"
-	CSVSeparatorChar  = ";"
+	CSVSeparatorChar  = ","
 )
 
 var log = new(Log)
@@ -562,147 +562,147 @@ func outputIPBlockListLoose(agents []Agent, name bool) {
 
 func outputCSV(agents []Agent) {
 
-	fmt.Printf("Agent ID;Agent Name;Agent Type;Location;Country;")
-	fmt.Printf("IPv4 Addresses;IPv4 Subnets (Strict);IPv4 Subnets (Loose);IPv4 Ranges (Strict);IPv4 Ranges (Loose);IPv4 Blocks (Strict);IPv4 Blocks (Loose);")
-	fmt.Printf("IPv6 Addresses;IPv6 Subnets (Strict);IPv6 Subnets (Loose);IPv6 Ranges (Strict);IPv6 Ranges (Loose);IPv6 Blocks (Strict);IPv6 Blocks (Loose);\n")
+	fmt.Printf("Agent ID%sAgent Name%sAgent Type%sLocation%sCountry%s", CSVSeparatorChar, CSVSeparatorChar, CSVSeparatorChar, CSVSeparatorChar, CSVSeparatorChar)
+	fmt.Printf("IPv4 Addresses%sIPv4 Subnets (Strict)%sIPv4 Subnets (Loose)%sIPv4 Ranges (Strict)%sIPv4 Ranges (Loose)%sIPv4 Blocks (Strict)%sIPv4 Blocks (Loose)%s", CSVSeparatorChar, CSVSeparatorChar, CSVSeparatorChar, CSVSeparatorChar, CSVSeparatorChar, CSVSeparatorChar, CSVSeparatorChar)
+	fmt.Printf("IPv6 Addresses%sIPv6 Subnets (Strict)%sIPv6 Subnets (Loose)%sIPv6 Ranges (Strict)%sIPv6 Ranges (Loose)%sIPv6 Blocks (Strict)%sIPv6 Blocks (Loose)\n", CSVSeparatorChar, CSVSeparatorChar, CSVSeparatorChar, CSVSeparatorChar, CSVSeparatorChar, CSVSeparatorChar)
 
 	agents = addDataToAgents(agents)
 
 	for _, agent := range agents {
-		fmt.Printf("%s%s%s%s%s%s%s%s%s%s", strconv.Itoa(agent.AgentID), CSVSeparatorChar, agent.AgentName, CSVSeparatorChar, agent.AgentType, CSVSeparatorChar, agent.Location, CSVSeparatorChar, agent.CountryID, CSVSeparatorChar)
+		fmt.Printf("%s%s\"%s\"%s%s%s\"%s\"%s%s%s", strconv.Itoa(agent.AgentID), CSVSeparatorChar, agent.AgentName, CSVSeparatorChar, agent.AgentType, CSVSeparatorChar, agent.Location, CSVSeparatorChar, agent.CountryID, CSVSeparatorChar)
 
 		ipStr := ""
 		if len(agent.IPv4Addresses) > 0 {
 			for _, ip := range agent.IPv4Addresses {
-				ipStr = ipStr + ip.String() + ","
+				ipStr = ipStr + ip.String() + "\n"
 			}
 			ipStr = ipStr[0 : len(ipStr)-1]
 		}
-		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
+		fmt.Printf("\"%s\"%s", ipStr, CSVSeparatorChar)
 		ipStr = ""
 		if len(agent.IPv4SubnetsStrict) > 0 {
 			for _, ipNet := range agent.IPv4SubnetsStrict {
 				s, t := ipNet.Mask.Size()
 				if s == t {
-					ipStr = ipStr + ipNet.IP.String() + ","
+					ipStr = ipStr + ipNet.IP.String() + "\n"
 				} else {
-					ipStr = ipStr + ipNet.String() + ","
+					ipStr = ipStr + ipNet.String() + "\n"
 				}
 			}
 			ipStr = ipStr[0 : len(ipStr)-1]
 		}
-		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
+		fmt.Printf("\"%s\"%s", ipStr, CSVSeparatorChar)
 		ipStr = ""
 		if len(agent.IPv4SubnetsLoose) > 0 {
 			for _, ipNet := range agent.IPv4SubnetsLoose {
 				s, t := ipNet.Mask.Size()
 				if s == t {
-					ipStr = ipStr + ipNet.IP.String() + ","
+					ipStr = ipStr + ipNet.IP.String() + "\n"
 				} else {
-					ipStr = ipStr + ipNet.String() + ","
+					ipStr = ipStr + ipNet.String() + "\n"
 				}
 			}
 			ipStr = ipStr[0 : len(ipStr)-1]
 		}
-		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
+		fmt.Printf("\"%s\"%s", ipStr, CSVSeparatorChar)
 		ipStr = ""
 		if len(agent.IPv4RangesStrict) > 0 {
 			for _, ipRange := range agent.IPv4RangesStrict {
-				ipStr = ipStr + ipRange.String() + ","
+				ipStr = ipStr + ipRange.String() + "\n"
 			}
 			ipStr = ipStr[0 : len(ipStr)-1]
 		}
-		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
+		fmt.Printf("\"%s\"%s", ipStr, CSVSeparatorChar)
 		ipStr = ""
 		if len(agent.IPv4RangesLoose) > 0 {
 			for _, ipRange := range agent.IPv4RangesLoose {
-				ipStr = ipStr + ipRange.String() + ","
+				ipStr = ipStr + ipRange.String() + "\n"
 			}
 			ipStr = ipStr[0 : len(ipStr)-1]
 		}
-		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
+		fmt.Printf("\"%s\"%s", ipStr, CSVSeparatorChar)
 		ipStr = ""
 		if len(agent.IPv4BlocksStrict) > 0 {
 			for _, ipBlock := range agent.IPv4BlocksStrict {
-				ipStr = ipStr + ipBlock.String() + ","
+				ipStr = ipStr + ipBlock.String() + "\n"
 			}
 			ipStr = ipStr[0 : len(ipStr)-1]
 		}
-		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
+		fmt.Printf("\"%s\"%s", ipStr, CSVSeparatorChar)
 		ipStr = ""
 		if len(agent.IPv4BlocksLoose) > 0 {
 			for _, ipBlock := range agent.IPv4BlocksLoose {
-				ipStr = ipStr + ipBlock.String() + ","
+				ipStr = ipStr + ipBlock.String() + "\n"
 			}
 			ipStr = ipStr[0 : len(ipStr)-1]
 		}
-		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
+		fmt.Printf("\"%s\"%s", ipStr, CSVSeparatorChar)
 		ipStr = ""
 		if len(agent.IPv6Addresses) > 0 {
 			for _, ip := range agent.IPv6Addresses {
-				ipStr = ipStr + ip.String() + ","
+				ipStr = ipStr + ip.String() + "\n"
 			}
 			ipStr = ipStr[0 : len(ipStr)-1]
 		}
-		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
+		fmt.Printf("\"%s\"%s", ipStr, CSVSeparatorChar)
 		ipStr = ""
 		if len(agent.IPv6SubnetsStrict) > 0 {
 			for _, ipNet := range agent.IPv6SubnetsStrict {
 				s, t := ipNet.Mask.Size()
 				if s == t {
-					ipStr = ipStr + ipNet.IP.String() + ","
+					ipStr = ipStr + ipNet.IP.String() + "\n"
 				} else {
-					ipStr = ipStr + ipNet.String() + ","
+					ipStr = ipStr + ipNet.String() + "\n"
 				}
 			}
 			ipStr = ipStr[0 : len(ipStr)-1]
 		}
-		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
+		fmt.Printf("\"%s\"%s", ipStr, CSVSeparatorChar)
 		ipStr = ""
 		if len(agent.IPv6SubnetsLoose) > 0 {
 			for _, ipNet := range agent.IPv6SubnetsLoose {
 				s, t := ipNet.Mask.Size()
 				if s == t {
-					ipStr = ipStr + ipNet.IP.String() + ","
+					ipStr = ipStr + ipNet.IP.String() + "\n"
 				} else {
-					ipStr = ipStr + ipNet.String() + ","
+					ipStr = ipStr + ipNet.String() + "\n"
 				}
 			}
 			ipStr = ipStr[0 : len(ipStr)-1]
 		}
-		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
+		fmt.Printf("\"%s\"%s", ipStr, CSVSeparatorChar)
 		ipStr = ""
 		if len(agent.IPv6RangesStrict) > 0 {
 			for _, ipRange := range agent.IPv6RangesStrict {
-				ipStr = ipStr + ipRange.String() + ","
+				ipStr = ipStr + ipRange.String() + "\n"
 			}
 			ipStr = ipStr[0 : len(ipStr)-1]
 		}
-		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
+		fmt.Printf("\"%s\"%s", ipStr, CSVSeparatorChar)
 		ipStr = ""
 		if len(agent.IPv6RangesLoose) > 0 {
 			for _, ipRange := range agent.IPv6RangesLoose {
-				ipStr = ipStr + ipRange.String() + ","
+				ipStr = ipStr + ipRange.String() + "\n"
 			}
 			ipStr = ipStr[0 : len(ipStr)-1]
 		}
-		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
+		fmt.Printf("\"%s\"%s", ipStr, CSVSeparatorChar)
 		ipStr = ""
 		if len(agent.IPv6BlocksStrict) > 0 {
 			for _, ipBlock := range agent.IPv6BlocksStrict {
-				ipStr = ipStr + ipBlock.String() + ","
+				ipStr = ipStr + ipBlock.String() + "\n"
 			}
 			ipStr = ipStr[0 : len(ipStr)-1]
 		}
-		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
+		fmt.Printf("\"%s\"%s", ipStr, CSVSeparatorChar)
 		ipStr = ""
 		if len(agent.IPv6BlocksLoose) > 0 {
 			for _, ipBlock := range agent.IPv6BlocksLoose {
-				ipStr = ipStr + ipBlock.String() + ","
+				ipStr = ipStr + ipBlock.String() + "\n"
 			}
 			ipStr = ipStr[0 : len(ipStr)-1]
 		}
-		fmt.Printf("%s%s", ipStr, CSVSeparatorChar)
+		fmt.Printf("\"%s\"", ipStr)
 
 		fmt.Printf("\n")
 	}
@@ -961,7 +961,7 @@ func outputXML(agents []Agent) {
 
 	x, _ := xml.MarshalIndent(outputAgents, "", "  ")
 
-  fmt.Printf("%s", xml.Header)
+	fmt.Printf("%s", xml.Header)
 	fmt.Printf("%s", string(x))
 }
 

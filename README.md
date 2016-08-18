@@ -150,8 +150,8 @@ are expressed as
 Example:
 
 ```
-Agent ID;Agent Name;Agent Type;Location;Country;IPv4 Addresses;IPv4 Subnets (Strict);IPv4 Subnets (Loose);IPv4 Ranges (Strict);IPv4 Ranges (Loose);IPv4 Blocks (Strict);IPv4 Blocks (Loose);IPv6 Addresses;IPv6 Subnets (Strict);IPv6 Subnets (Loose);IPv6 Ranges (Strict);IPv6 Ranges (Loose);IPv6 Blocks (Strict);IPv6 Blocks (Loose);
-24695;Nagoya, Japan;Cloud;Aichi, Japan;JP;1.2.3.37,1.2.3.38,1.2.3.39;1.2.3.37,1.2.3.38/31;1.2.3.36/30;1.2.3.37 - 1.2.3.39;1.2.3.37 - 1.2.3.39;1.2.3.[37-39];1.2.3.[37-39];;;;;;;;
+Agent ID,Agent Name,Agent Type,Location,Country,IPv4 Addresses,IPv4 Subnets (Strict),IPv4 Subnets (Loose),IPv4 Ranges (Strict),IPv4 Ranges (Loose),IPv4 Blocks (Strict),IPv4 Blocks (Loose),IPv6 Addresses,IPv6 Subnets (Strict),IPv6 Subnets (Loose),IPv6 Ranges (Strict),IPv6 Ranges (Loose),IPv6 Blocks (Strict),IPv6 Blocks (Loose)
+24695,"Nagoya, Japan",Cloud,"Aichi, Japan",JP,"1.2.3.37","1.2.3.38","1.2.3.39","1.2.3.37","1.2.3.38/31","1.2.3.36/30","1.2.3.37 - 1.2.3.39","1.2.3.37 - 1.2.3.39","1.2.3.[37-39]","1.2.3.[37-39]","","","","","","",""
 ```
 
 #### -o json
