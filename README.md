@@ -234,8 +234,14 @@ Display only Agents with IPv4 addresses
 #### -6
 Display only Agents with IPv6 addresses
 
+#### -c
+Display only Cloud Agents
+
 #### -e
 Display only Enterprise Agents
 
-#### -c
-Display only Cloud Agents
+#### -e-public
+Display only Enterprise Agents public IP addresses
+
+#### -e-private
+Display only Enterprise Agents private IP addresses

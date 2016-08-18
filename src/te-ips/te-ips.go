@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	Ver               = "0.6"
+	Ver               = "0.7"
 	ApiUrl            = "https://api.thousandeyes.com/agents.json"
 	IPList            = "ip"
 	SubnetListStrict  = "subnet-strict"
@@ -43,12 +43,13 @@ var log = new(Log)
 
 type Agent struct {
 	// Imported from input JSON
-	AgentID     int      `json:"agentId"`
-	AgentName   string   `json:"agentName"`
-	AgentType   string   `json:"agentType"`
-	Location    string   `json:"location"`
-	CountryID   string   `json:"countryId"`
-	IPAddresses []string `json:"ipAddresses"`
+	AgentID           int      `json:"agentId"`
+	AgentName         string   `json:"agentName"`
+	AgentType         string   `json:"agentType"`
+	Location          string   `json:"location"`
+	CountryID         string   `json:"countryId"`
+	IPAddresses       []string `json:"ipAddresses"`
+	PublicIPAddresses []string `json:"publicIpAddresses"`
 	// Generated
 	IPv4Addresses     []net.IP
 	IPv6Addresses     []net.IP
@@ -77,6 +78,8 @@ func main() {
 	i6 := flag.Bool("6", false, "Display only IPv6 addresses")
 	ea := flag.Bool("e", false, "Display only Enterprise Agent addresses")
 	ca := flag.Bool("c", false, "Display only Cloud Agent addresses")
+	eaPub := flag.Bool("e-public", false, "Display only Enterprise Agent Public IP addresses")
+	eaPriv := flag.Bool("e-private", false, "Display only Enterprise Agent Private IP addresses")
 	name := flag.Bool("n", false, "Add Agent name as a comment to "+IPList+", "+SubnetListStrict+", "+SubnetListLoose+", "+IPRangeListStrict+", "+IPRangeListLoose+", "+IPBlockListStrict+" and "+IPBlockListLoose+" output types.")
 	flag.Parse()
 
@@ -106,15 +109,23 @@ func main() {
 	}
 
 	var enterprise, cloud bool
-	if *ea && !*ca {
+	if (*ea || *eaPub || *eaPriv) && !*ca {
 		enterprise = true
-		cloud = false
-	} else if !*ea && *ca {
-		enterprise = false
+	} else if !*ea && !*eaPub && !*eaPriv && *ca {
 		cloud = true
 	} else {
 		enterprise = true
 		cloud = true
+	}
+
+	var enterprisePublic, enterprisePrivate bool
+	if *ea || (*eaPub && *eaPriv) || (!*ea && !*eaPub && !*eaPriv && !*ca) {
+		enterprisePublic = true
+		enterprisePrivate = true
+	} else if *eaPub {
+		enterprisePublic = true
+	} else if *eaPriv {
+		enterprisePrivate = true
 	}
 
 	if !validateEmail(*user) {
@@ -127,7 +138,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	agents, _ := fetchAgents(*user, *token, enterprise, cloud, ipv4, ipv6)
+	agents, _ := fetchAgents(*user, *token, enterprise, cloud, ipv4, ipv6, enterprisePublic, enterprisePrivate)
 
 	if strings.ToLower(*output) == IPList {
 		outputIPList(agents, *name)
@@ -166,7 +177,7 @@ func validateToken(token string) bool {
 	return Re.MatchString(token)
 }
 
-func fetchAgents(user string, token string, enterprise bool, cloud bool, ipv4 bool, ipv6 bool) ([]Agent, error) {
+func fetchAgents(user, token string, enterprise, cloud, ipv4, ipv6, enterprisePublic, enterprisePrivate bool) ([]Agent, error) {
 
 	type Agents struct {
 		Agents []Agent `json:"agents"`
@@ -176,12 +187,12 @@ func fetchAgents(user string, token string, enterprise bool, cloud bool, ipv4 bo
 
 	var netTransport = &http.Transport{
 		Dial: (&net.Dialer{
-			Timeout: 5 * time.Second,
+			Timeout: 30 * time.Second,
 		}).Dial,
-		TLSHandshakeTimeout: 5 * time.Second,
+		TLSHandshakeTimeout: 30 * time.Second,
 	}
 	var netClient = &http.Client{
-		Timeout:   time.Second * 10,
+		Timeout:   time.Second * 30,
 		Transport: netTransport,
 	}
 	request, _ := http.NewRequest("GET", ApiUrl, nil)
@@ -189,6 +200,7 @@ func fetchAgents(user string, token string, enterprise bool, cloud bool, ipv4 bo
 	response, err := netClient.Do(request)
 	if err != nil {
 		log.Error("TE API request error: %s", err.Error())
+		os.Exit(0)
 	}
 
 	if response.StatusCode == http.StatusOK {
@@ -233,8 +245,18 @@ func fetchAgents(user string, token string, enterprise bool, cloud bool, ipv4 bo
 	}
 
 	for i, agent := range agents.Agents {
-		if len(agent.IPAddresses) > 0 {
+		if (agent.AgentType == Cloud || (agent.AgentType == Enterprise && enterprisePrivate)) && len(agent.IPAddresses) > 0 {
 			for _, ip := range agent.IPAddresses {
+				if ipv6 && strings.Contains(ip, ":") {
+					agents.Agents[i].IPv6Addresses = append(agents.Agents[i].IPv6Addresses, net.ParseIP(ip))
+				} else if ipv4 && strings.Contains(ip, ".") {
+					agents.Agents[i].IPv4Addresses = append(agents.Agents[i].IPv4Addresses, net.ParseIP(ip))
+				}
+			}
+			agents.Agents[i].IPAddresses = []string{}
+		}
+		if enterprisePublic && len(agent.PublicIPAddresses) > 0 {
+			for _, ip := range agent.PublicIPAddresses {
 				if ipv6 && strings.Contains(ip, ":") {
 					agents.Agents[i].IPv6Addresses = append(agents.Agents[i].IPv6Addresses, net.ParseIP(ip))
 				} else if ipv4 && strings.Contains(ip, ".") {
