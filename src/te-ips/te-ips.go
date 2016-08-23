@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	Ver               = "0.7"
+	Ver               = "0.8"
 	ApiUrl            = "https://api.thousandeyes.com/agents.json"
 	IPList            = "ip"
 	SubnetListStrict  = "subnet-strict"
@@ -33,6 +33,7 @@ const (
 	JSON              = "json"
 	XML               = "xml"
 	Enterprise        = "Enterprise"
+	EnterpriseCluster = "Enterprise Cluster"
 	Cloud             = "Cloud"
 	ListCommentChar   = "#"
 	ListSeparatorChar = ";"
@@ -50,6 +51,7 @@ type Agent struct {
 	CountryID         string   `json:"countryId"`
 	IPAddresses       []string `json:"ipAddresses"`
 	PublicIPAddresses []string `json:"publicIpAddresses"`
+	ClusterMembers    []Agent  `json:"clusterMembers"`
 	// Generated
 	IPv4Addresses     []net.IP
 	IPv6Addresses     []net.IP
@@ -234,7 +236,7 @@ func fetchAgents(user, token string, enterprise, cloud, ipv4, ipv6, enterprisePu
 		for i := len(agents.Agents) - 1; i >= 0; i-- {
 			agent := agents.Agents[i]
 			// Condition to decide if current element has to be deleted:
-			if enterprise && agent.AgentType == Enterprise {
+			if enterprise && (agent.AgentType == Enterprise || agent.AgentType == EnterpriseCluster) {
 				// Keep it
 			} else if cloud && agent.AgentType == Cloud {
 				// Keep it
@@ -245,6 +247,7 @@ func fetchAgents(user, token string, enterprise, cloud, ipv4, ipv6, enterprisePu
 	}
 
 	for i, agent := range agents.Agents {
+		// Cloud public & Enterprise private addresses
 		if (agent.AgentType == Cloud || (agent.AgentType == Enterprise && enterprisePrivate)) && len(agent.IPAddresses) > 0 {
 			for _, ip := range agent.IPAddresses {
 				if ipv6 && strings.Contains(ip, ":") {
@@ -253,8 +256,8 @@ func fetchAgents(user, token string, enterprise, cloud, ipv4, ipv6, enterprisePu
 					agents.Agents[i].IPv4Addresses = append(agents.Agents[i].IPv4Addresses, net.ParseIP(ip))
 				}
 			}
-			agents.Agents[i].IPAddresses = []string{}
 		}
+		// Enterprise public addresses
 		if enterprisePublic && len(agent.PublicIPAddresses) > 0 {
 			for _, ip := range agent.PublicIPAddresses {
 				if ipv6 && strings.Contains(ip, ":") {
@@ -263,8 +266,43 @@ func fetchAgents(user, token string, enterprise, cloud, ipv4, ipv6, enterprisePu
 					agents.Agents[i].IPv4Addresses = append(agents.Agents[i].IPv4Addresses, net.ParseIP(ip))
 				}
 			}
-			agents.Agents[i].IPAddresses = []string{}
+			for _, clusterMember := range agent.ClusterMembers {
+				for _, ip := range clusterMember.PublicIPAddresses {
+					if ipv6 && strings.Contains(ip, ":") {
+						agents.Agents[i].IPv6Addresses = append(agents.Agents[i].IPv6Addresses, net.ParseIP(ip))
+					} else if ipv4 && strings.Contains(ip, ".") {
+						agents.Agents[i].IPv4Addresses = append(agents.Agents[i].IPv4Addresses, net.ParseIP(ip))
+					}
+				}
+			}
 		}
+		// Enterprise Cluster private addresses
+		if enterprisePrivate && agent.AgentType == EnterpriseCluster && len(agent.ClusterMembers) > 0 {
+			for _, clusterMember := range agent.ClusterMembers {
+				for _, ip := range clusterMember.IPAddresses {
+					if ipv6 && strings.Contains(ip, ":") {
+						agents.Agents[i].IPv6Addresses = append(agents.Agents[i].IPv6Addresses, net.ParseIP(ip))
+					} else if ipv4 && strings.Contains(ip, ".") {
+						agents.Agents[i].IPv4Addresses = append(agents.Agents[i].IPv4Addresses, net.ParseIP(ip))
+					}
+				}
+			}
+		}
+		// Enterprise Cluster public addresses
+		if enterprisePublic && agent.AgentType == EnterpriseCluster && len(agent.ClusterMembers) > 0 {
+			for _, clusterMember := range agent.ClusterMembers {
+				for _, ip := range clusterMember.PublicIPAddresses {
+					if ipv6 && strings.Contains(ip, ":") {
+						agents.Agents[i].IPv6Addresses = append(agents.Agents[i].IPv6Addresses, net.ParseIP(ip))
+					} else if ipv4 && strings.Contains(ip, ".") {
+						agents.Agents[i].IPv4Addresses = append(agents.Agents[i].IPv4Addresses, net.ParseIP(ip))
+					}
+				}
+			}
+		}
+		agents.Agents[i].IPAddresses = []string{}
+		agents.Agents[i].PublicIPAddresses = []string{}
+		agents.Agents[i].ClusterMembers = []Agent{}
 	}
 
 	if !ipv4 || !ipv6 {
