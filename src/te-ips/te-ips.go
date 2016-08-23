@@ -20,8 +20,8 @@ import (
 )
 
 const (
-	Ver               = "0.8"
-	ApiUrl            = "https://api.thousandeyes.com/agents.json"
+	Ver               = "0.9"
+	ApiUrl            = "https://api.thousandeyes.com"
 	IPList            = "ip"
 	SubnetListStrict  = "subnet-strict"
 	SubnetListLoose   = "subnet-loose"
@@ -35,6 +35,7 @@ const (
 	Enterprise        = "Enterprise"
 	EnterpriseCluster = "Enterprise Cluster"
 	Cloud             = "Cloud"
+	Default           = "default"
 	ListCommentChar   = "#"
 	ListSeparatorChar = ";"
 	CSVSeparatorChar  = ","
@@ -73,9 +74,11 @@ func main() {
 
 	// Flags
 	version := flag.Bool("v", false, "Prints out version")
+	ags := flag.Bool("account-groups", false, "Prints out Account Group IDs")
 	output := flag.String("o", SubnetListStrict, "Output type ("+IPList+", "+SubnetListStrict+", "+SubnetListLoose+", "+IPRangeListStrict+", "+IPRangeListLoose+", "+IPBlockListStrict+", "+IPBlockListLoose+", "+CSV+", "+JSON+", "+XML+")")
 	user := flag.String("u", "", "ThousandEyes user")
 	token := flag.String("t", "", "ThousandEyes user API token")
+	aid := flag.String("a", "default", "Display Agents available in chosen Account Group ID")
 	i4 := flag.Bool("4", false, "Display only IPv4 addresses")
 	i6 := flag.Bool("6", false, "Display only IPv6 addresses")
 	ea := flag.Bool("e", false, "Display only Enterprise Agent addresses")
@@ -130,6 +133,13 @@ func main() {
 		enterprisePrivate = true
 	}
 
+	if *aid != Default {
+		if _, err := strconv.Atoi(*aid); err != nil {
+			log.Error("%a is not a valid -aid value, it must be a number. Try '-ags' to list the available Account Group IDs.", *aid)
+			os.Exit(0)
+		}
+	}
+
 	if !validateEmail(*user) {
 		log.Error("'%s' is not a valid ThousandEyes user.", *user)
 		os.Exit(0)
@@ -140,7 +150,15 @@ func main() {
 		os.Exit(0)
 	}
 
-	agents, _ := fetchAgents(*user, *token, enterprise, cloud, ipv4, ipv6, enterprisePublic, enterprisePrivate)
+	if *ags == true {
+		err := outputAccountGroups(*user, *token)
+		if err != nil {
+			log.Error("/accounts API call error: %s", err.Error())
+		}
+		os.Exit(0)
+	}
+
+	agents, _ := fetchAgents(*user, *token, *aid, enterprise, cloud, ipv4, ipv6, enterprisePublic, enterprisePrivate)
 
 	if strings.ToLower(*output) == IPList {
 		outputIPList(agents, *name)
@@ -179,13 +197,7 @@ func validateToken(token string) bool {
 	return Re.MatchString(token)
 }
 
-func fetchAgents(user, token string, enterprise, cloud, ipv4, ipv6, enterprisePublic, enterprisePrivate bool) ([]Agent, error) {
-
-	type Agents struct {
-		Agents []Agent `json:"agents"`
-	}
-
-	var agents Agents
+func apiRequest(user, token, endpoint string) *http.Response {
 
 	var netTransport = &http.Transport{
 		Dial: (&net.Dialer{
@@ -193,11 +205,13 @@ func fetchAgents(user, token string, enterprise, cloud, ipv4, ipv6, enterprisePu
 		}).Dial,
 		TLSHandshakeTimeout: 30 * time.Second,
 	}
+
 	var netClient = &http.Client{
 		Timeout:   time.Second * 30,
 		Transport: netTransport,
 	}
-	request, _ := http.NewRequest("GET", ApiUrl, nil)
+
+	request, _ := http.NewRequest("GET", ApiUrl+endpoint, nil)
 	request.SetBasicAuth(user, token)
 	response, err := netClient.Do(request)
 	if err != nil {
@@ -211,7 +225,7 @@ func fetchAgents(user, token string, enterprise, cloud, ipv4, ipv6, enterprisePu
 		log.Error("Invalid credentials provided. (401)")
 		os.Exit(0)
 	} else if response.StatusCode == http.StatusForbidden {
-		log.Error("Your account does not have permissions to view Agents. (403)")
+		log.Error("Your account does not have permissions to view Agents for this Account Group. (403)")
 		os.Exit(0)
 	} else if response.StatusCode == http.StatusTooManyRequests {
 		log.Error("Your are issuing to many API calls. Try again in a minute. (429)")
@@ -227,7 +241,77 @@ func fetchAgents(user, token string, enterprise, cloud, ipv4, ipv6, enterprisePu
 		os.Exit(0)
 	}
 
-	err = json.NewDecoder(response.Body).Decode(&agents)
+	return response
+
+}
+
+func outputAccountGroups(user, token string) error {
+
+	type Account struct {
+		ID               int    `json:"aid"`
+		Name             string `json:"accountName"`
+		OrganizationName string `json:"organizationName"`
+		Default          uint   `json:"default"`
+	}
+
+	type Accounts struct {
+		Accounts []Account `json:"account"`
+	}
+
+	var accounts Accounts
+
+	response := apiRequest(user, token, "/accounts.json")
+
+	err := json.NewDecoder(response.Body).Decode(&accounts)
+	if err != nil {
+		return err
+	}
+
+	maxIdLen := 3
+	maxNameLen := 18
+	maxOrgLen := 17
+	for _, a := range accounts.Accounts {
+		idStr := strconv.Itoa(a.ID)
+		if len(idStr) > maxIdLen {
+			maxIdLen = len(idStr)
+		}
+		if len(a.Name) > maxNameLen {
+			maxNameLen = len(a.Name)
+		}
+		if len(a.OrganizationName) > maxOrgLen {
+			maxOrgLen = len(a.OrganizationName)
+		}
+	}
+
+	fmt.Printf("\n%s  %s  %s\n", pad("AID", maxIdLen), pad("Organization Name", maxOrgLen), pad("Account Group Name", maxNameLen))
+	for _, a := range accounts.Accounts {
+		fmt.Printf("\n%s  %s  %s", pad(strconv.Itoa(a.ID), maxIdLen), pad(a.OrganizationName, maxOrgLen), pad(a.Name, maxNameLen))
+		if a.Default > 0 {
+			fmt.Printf(" (default)")
+		}
+	}
+	fmt.Printf("\n\n")
+
+	return nil
+
+}
+
+func fetchAgents(user, token, aid string, enterprise, cloud, ipv4, ipv6, enterprisePublic, enterprisePrivate bool) ([]Agent, error) {
+
+	type Agents struct {
+		Agents []Agent `json:"agents"`
+	}
+
+	var agents Agents
+
+	endpoint := "/agents.json"
+	if aid != Default {
+		endpoint = endpoint + "?aid=" + aid
+	}
+
+	response := apiRequest(user, token, endpoint)
+
+	err := json.NewDecoder(response.Body).Decode(&agents)
 	if err != nil {
 		return []Agent{}, err
 	}

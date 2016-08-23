@@ -31,6 +31,17 @@ You need to be in possession of a valid ThousandEyes account to use this utility
 te-ips -u <user> -t <user-api-token>
 ```
 
+## Account Groups
+
+#### -a
+Users assigned to multiple Account Groups can list the Agents available in a specific Account Group with the ``-a <accountGroupId>`` argument. You can list available Account Group IDs with:
+
+```
+te-ips -u <user> -t <user-api-token> -account-groups
+```
+
+If ``-a`` is not provided, user's default Account Group is used.
+
 ### Output formats
 
 #### -o ip
