@@ -9,12 +9,18 @@ CLI utility that queries ThousandEyes API for the Agents available for your acco
 * [macOS](https://github.com/jamsix/te-ips/raw/master/bin/macos/te-ips)
 * [Windows](https://github.com/jamsix/te-ips/raw/master/bin/win/te-ips.exe)
 
-### Make the binary executable
+### Installation
 
 On linux/macOS make the binary executable:
 
 ```
 chmod +x te-ips
+```
+
+(Optional) Move it to a folder that is in your $PATH, so you can invoke the command from any folder:
+
+```
+sudo cp te-ips /usr/local/bin/
 ```
 
 ## Usage
