@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	Ver               = "0.9"
+	Ver               = "1.0"
 	ApiUrl            = "https://api.thousandeyes.com"
 	IPList            = "ip"
 	SubnetListStrict  = "subnet-strict"
