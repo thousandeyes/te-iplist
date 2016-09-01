@@ -1,26 +1,28 @@
-# te-ips
+# te-iplist
 _ThousandEyes Agent IP List_
 
 CLI utility that queries ThousandEyes API for the Agents available for your account and outputs Agent IPs in different forms (IP list, subnet list, IP range list, IP block list) and formats (plain text, CSV, JSON, XML).
 
 ## Download
 
-* [Linux](https://github.com/jamsix/te-ips/raw/master/bin/linux-32/te-ips)
-* [macOS](https://github.com/jamsix/te-ips/raw/master/bin/macos/te-ips)
-* [Windows](https://github.com/jamsix/te-ips/raw/master/bin/win/te-ips.exe)
+* [Linux](https://github.com/thousandeyes/te-iplist/raw/master/bin/linux-32/te-iplist)
+* [macOS](https://github.com/thousandeyes/te-iplist/raw/master/bin/macos/te-iplist)
+* [Windows](https://github.com/thousandeyes/te-iplist/raw/master/bin/win/te-iplist.exe)
 
 ### Installation
 
-On linux/macOS make the binary executable:
+#### Linux / macOS
+
+Make the binary executable:
 
 ```
-chmod +x te-ips
+chmod +x te-iplist
 ```
 
 (Optional) Move it to a folder that is in your $PATH, so you can invoke the command from any folder:
 
 ```
-sudo cp te-ips /usr/local/bin/
+sudo cp te-iplist /usr/local/bin/
 ```
 
 ## Usage
@@ -28,7 +30,7 @@ sudo cp te-ips /usr/local/bin/
 You need to be in possession of a valid ThousandEyes account to use this utility.
 
 ```
-te-ips -u <user> -t <user-api-token>
+te-iplist -u <user> -t <user-api-token>
 ```
 
 ### Account Groups
@@ -37,7 +39,7 @@ te-ips -u <user> -t <user-api-token>
 Users assigned to multiple Account Groups can list the Agents available in a specific Account Group with the ``-a <accountGroupId>`` argument. You can list available Account Group IDs with:
 
 ```
-te-ips -u <user> -t <user-api-token> -account-groups
+te-iplist -u <user> -t <user-api-token> -account-groups
 ```
 
 If ``-a`` is not provided, user's default Account Group is used.
