@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	Ver               = "1.0"
+	Ver               = "1.0.1"
 	ApiUrl            = "https://api.thousandeyes.com"
 	IPList            = "ip"
 	SubnetListStrict  = "subnet-strict"
@@ -188,7 +188,7 @@ func main() {
 }
 
 func validateEmail(email string) bool {
-	Re := regexp.MustCompile(`^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$`)
+	Re := regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,4}$`)
 	return Re.MatchString(email)
 }
 
@@ -234,7 +234,7 @@ func apiRequest(user, token, endpoint string) *http.Response {
 		log.Error("ThousandEyes API internal server error. Try again later. (500)")
 		os.Exit(0)
 	} else if response.StatusCode == http.StatusServiceUnavailable {
-		log.Error("ThousandEyes API us under maintenance. Try again later. (503)")
+		log.Error("ThousandEyes API is under maintenance. Try again later. (503)")
 		os.Exit(0)
 	} else {
 		log.Error("ThousandEyes API HTTP error: %s", response.Status)
