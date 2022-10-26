@@ -6,7 +6,8 @@ CLI utility that queries ThousandEyes API for the Agents available for your acco
 ## Download
 
 * [Linux](https://github.com/thousandeyes/te-iplist/raw/master/bin/linux-32/te-iplist)
-* [macOS](https://github.com/thousandeyes/te-iplist/raw/master/bin/macos/te-iplist)
+* [macOS x64](https://github.com/thousandeyes/te-iplist/raw/master/bin/macos/te-iplist)
+* [macOS arm64](https://github.com/thousandeyes/te-iplist/raw/master/bin/macos-arm64/te-iplist)
 * [Windows](https://github.com/thousandeyes/te-iplist/raw/master/bin/win/te-iplist.exe)
 
 ### Installation
