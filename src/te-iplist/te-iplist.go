@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	Ver               = "1.0.1"
+	Ver               = "1.0.2"
 	ApiUrl            = "https://api.thousandeyes.com"
 	IPList            = "ip"
 	SubnetListStrict  = "subnet-strict"
@@ -213,6 +213,7 @@ func apiRequest(user, token, endpoint string) *http.Response {
 
 	request, _ := http.NewRequest("GET", ApiUrl+endpoint, nil)
 	request.SetBasicAuth(user, token)
+	request.Header.Set("User-Agent", "te-iplist/" + Ver)
 	response, err := netClient.Do(request)
 	if err != nil {
 		log.Error("TE API request error: %s", err.Error())
