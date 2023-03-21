@@ -78,6 +78,7 @@ func main() {
 	output := flag.String("o", SubnetListStrict, "Output type ("+IPList+", "+SubnetListStrict+", "+SubnetListLoose+", "+IPRangeListStrict+", "+IPRangeListLoose+", "+IPBlockListStrict+", "+IPBlockListLoose+", "+CSV+", "+JSON+", "+XML+")")
 	user := flag.String("u", "", "ThousandEyes user")
 	token := flag.String("t", "", "ThousandEyes user API token")
+        bearerToken := flag.String("b", "", "ThousandEyes API bearer token")
 	aid := flag.String("a", "default", "Display Agents available in chosen Account Group ID")
 	i4 := flag.Bool("4", false, "Display only IPv4 addresses")
 	i6 := flag.Bool("6", false, "Display only IPv6 addresses")
@@ -93,9 +94,10 @@ func main() {
 		os.Exit(0)
 	}
 
-	if *user == "" && *token == "" {
+	if *user == "" && *token == "" && *bearerToken == "" {
 		fmt.Printf("\nThousandEyes Agent IP List v%s (%s/%s)\n\n", Ver, runtime.GOOS, runtime.GOARCH)
-		fmt.Printf("Usage:\n  %s -u <user> -t <user-api-token>\n\nHelp:\n", os.Args[0])
+		fmt.Printf("Usage:\n  %s -u <user> -t <user-api-token>\n", os.Args[0])
+                fmt.Printf("  %s -b <api-bearer-token>\n\nHelp:\n", os.Args[0])
 		flag.PrintDefaults()
 		fmt.Printf("\n")
 		os.Exit(0)
@@ -140,25 +142,30 @@ func main() {
 		}
 	}
 
-	if !validateEmail(*user) {
+	if *user != "" && !validateEmail(*user) {
 		log.Error("'%s' is not a valid ThousandEyes user.", *user)
 		os.Exit(0)
 	}
 
-	if !validateToken(*token) {
+	if *token != "" && !validateToken(*token) {
 		log.Error("'%s' is not a valid ThousandEyes user API token. Find your token at https://app.thousandeyes.com/settings/account/?section=profile", *token)
 		os.Exit(0)
 	}
 
+        if *bearerToken !="" && !validateBearerToken(*bearerToken) {
+                log.Error("'%s' is not a valid ThousandEyes API bearertoken. Find your token at https://app.thousandeyes.com/settings/account/?section=profile", *bearerToken)
+                os.Exit(0)
+        }
+
 	if *ags == true {
-		err := outputAccountGroups(*user, *token)
+		err := outputAccountGroups(*user, *token, *bearerToken)
 		if err != nil {
 			log.Error("/accounts API call error: %s", err.Error())
 		}
 		os.Exit(0)
 	}
 
-	agents, _ := fetchAgents(*user, *token, *aid, enterprise, cloud, ipv4, ipv6, enterprisePublic, enterprisePrivate)
+	agents, _ := fetchAgents(*user, *token, *bearerToken, *aid, enterprise, cloud, ipv4, ipv6, enterprisePublic, enterprisePrivate)
 
 	if strings.ToLower(*output) == IPList {
 		outputIPList(agents, *name)
@@ -197,7 +204,12 @@ func validateToken(token string) bool {
 	return Re.MatchString(token)
 }
 
-func apiRequest(user, token, endpoint string) *http.Response {
+func validateBearerToken(token string) bool {
+        Re := regexp.MustCompile(`^([a-fA-F0-9]{4}-)?[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-4[a-fA-F0-9]{3}-[8|9|aA|bB][a-fA-F0-9]{3}-[a-fA-F0-9]{12}$`)
+        return Re.MatchString(token)
+}
+
+func apiRequest(user, token, bearerToken, endpoint string) *http.Response {
 
 	var netTransport = &http.Transport{
 		Dial: (&net.Dialer{
@@ -211,8 +223,13 @@ func apiRequest(user, token, endpoint string) *http.Response {
 		Transport: netTransport,
 	}
 
-	request, _ := http.NewRequest("GET", ApiUrl+endpoint, nil)
-	request.SetBasicAuth(user, token)
+        request, _ := http.NewRequest("GET", ApiUrl+endpoint, nil)
+        if bearerToken != "" {
+               request.Header.Set("Authorization", "Bearer " +  bearerToken)
+        } else {
+	        request.SetBasicAuth(user, token)
+        }
+
 	request.Header.Set("User-Agent", "te-iplist/" + Ver)
 	response, err := netClient.Do(request)
 	if err != nil {
@@ -246,7 +263,7 @@ func apiRequest(user, token, endpoint string) *http.Response {
 
 }
 
-func outputAccountGroups(user, token string) error {
+func outputAccountGroups(user, token, bearerToken string) error {
 
 	type Account struct {
 		ID               int    `json:"aid"`
@@ -261,7 +278,7 @@ func outputAccountGroups(user, token string) error {
 
 	var accounts Accounts
 
-	response := apiRequest(user, token, "/accounts.json")
+	response := apiRequest(user, token, bearerToken, "/accounts.json")
 
 	err := json.NewDecoder(response.Body).Decode(&accounts)
 	if err != nil {
@@ -297,7 +314,7 @@ func outputAccountGroups(user, token string) error {
 
 }
 
-func fetchAgents(user, token, aid string, enterprise, cloud, ipv4, ipv6, enterprisePublic, enterprisePrivate bool) ([]Agent, error) {
+func fetchAgents(user, token, bearerToken, aid string, enterprise, cloud, ipv4, ipv6, enterprisePublic, enterprisePrivate bool) ([]Agent, error) {
 
 	type Agents struct {
 		Agents []Agent `json:"agents"`
@@ -310,7 +327,7 @@ func fetchAgents(user, token, aid string, enterprise, cloud, ipv4, ipv6, enterpr
 		endpoint = endpoint + "?aid=" + aid
 	}
 
-	response := apiRequest(user, token, endpoint)
+	response := apiRequest(user, token, bearerToken, endpoint)
 
 	err := json.NewDecoder(response.Body).Decode(&agents)
 	if err != nil {
