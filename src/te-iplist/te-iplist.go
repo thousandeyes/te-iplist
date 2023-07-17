@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	Ver               = "1.0.2"
+	Ver               = "1.0.3"
 	ApiUrl            = "https://api.thousandeyes.com"
 	IPList            = "ip"
 	SubnetListStrict  = "subnet-strict"
@@ -77,7 +77,7 @@ func main() {
 	ags := flag.Bool("account-groups", false, "Prints out Account Group IDs")
 	output := flag.String("o", SubnetListStrict, "Output type ("+IPList+", "+SubnetListStrict+", "+SubnetListLoose+", "+IPRangeListStrict+", "+IPRangeListLoose+", "+IPBlockListStrict+", "+IPBlockListLoose+", "+CSV+", "+JSON+", "+XML+")")
 	user := flag.String("u", "", "ThousandEyes user")
-	token := flag.String("t", "", "ThousandEyes user API token")
+	token := flag.String("t", "", "ThousandEyes API token")
 	aid := flag.String("a", "default", "Display Agents available in chosen Account Group ID")
 	i4 := flag.Bool("4", false, "Display only IPv4 addresses")
 	i6 := flag.Bool("6", false, "Display only IPv6 addresses")
@@ -93,9 +93,9 @@ func main() {
 		os.Exit(0)
 	}
 
-	if *user == "" && *token == "" {
+	if *token == "" {
 		fmt.Printf("\nThousandEyes Agent IP List v%s (%s/%s)\n\n", Ver, runtime.GOOS, runtime.GOARCH)
-		fmt.Printf("Usage:\n  %s -u <user> -t <user-api-token>\n\nHelp:\n", os.Args[0])
+		fmt.Printf("Usage:\n  %s -u <user> -t <api-token>\n\nHelp:\n", os.Args[0])
 		flag.PrintDefaults()
 		fmt.Printf("\n")
 		os.Exit(0)
@@ -140,13 +140,13 @@ func main() {
 		}
 	}
 
-	if !validateEmail(*user) {
-		log.Error("'%s' is not a valid ThousandEyes user.", *user)
-		os.Exit(0)
-	}
-
-	if !validateToken(*token) {
-		log.Error("'%s' is not a valid ThousandEyes user API token. Find your token at https://app.thousandeyes.com/settings/account/?section=profile", *token)
+	if validateUserToken(*token) {
+		if !validateEmail(*user) {
+			log.Error("'%s' is not a valid ThousandEyes user.", *user)
+			os.Exit(0)
+		}
+	} else if !validateOauthToken(*token) {
+		log.Error("'%s' is not a valid ThousandEyes token. Find your token at https://app.thousandeyes.com/settings/account/?section=profile", *token)
 		os.Exit(0)
 	}
 
@@ -192,8 +192,13 @@ func validateEmail(email string) bool {
 	return Re.MatchString(email)
 }
 
-func validateToken(token string) bool {
+func validateUserToken(token string) bool {
 	Re := regexp.MustCompile(`^[a-zA-Z0-9]{32}$`)
+	return Re.MatchString(token)
+}
+
+func validateOauthToken(token string) bool {
+	Re := regexp.MustCompile(`^[a-zA-Z0-9-]{36}$`)
 	return Re.MatchString(token)
 }
 
@@ -212,8 +217,13 @@ func apiRequest(user, token, endpoint string) *http.Response {
 	}
 
 	request, _ := http.NewRequest("GET", ApiUrl+endpoint, nil)
-	request.SetBasicAuth(user, token)
-	request.Header.Set("User-Agent", "te-iplist/" + Ver)
+	if validateOauthToken(token) {
+		request.Header.Set("Authorization", "Bearer "+token)
+	} else {
+		request.SetBasicAuth(user, token)
+	}
+
+	request.Header.Set("User-Agent", "te-iplist/"+Ver)
 	response, err := netClient.Do(request)
 	if err != nil {
 		log.Error("TE API request error: %s", err.Error())
