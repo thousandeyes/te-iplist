@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	Ver               = "1.0.3"
+	Ver               = "1.0.4"
 	ApiUrl            = "https://api.thousandeyes.com"
 	IPList            = "ip"
 	SubnetListStrict  = "subnet-strict"
@@ -198,7 +198,7 @@ func validateUserToken(token string) bool {
 }
 
 func validateOauthToken(token string) bool {
-	Re := regexp.MustCompile(`^[a-zA-Z0-9-]{36}$`)
+	Re := regexp.MustCompile(`^[a-zA-Z0-9-]{36,64}$`)
 	return Re.MatchString(token)
 }
 
