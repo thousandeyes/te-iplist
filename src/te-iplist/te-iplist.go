@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	Ver               = "1.0.3"
+	Ver               = "1.1.0"
 	ApiUrl            = "https://api.thousandeyes.com"
 	IPList            = "ip"
 	SubnetListStrict  = "subnet-strict"
@@ -32,9 +32,9 @@ const (
 	CSV               = "csv"
 	JSON              = "json"
 	XML               = "xml"
-	Enterprise        = "Enterprise"
-	EnterpriseCluster = "Enterprise Cluster"
-	Cloud             = "Cloud"
+	Enterprise        = "enterprise"
+	EnterpriseCluster = "enterprise-cluster"
+	Cloud             = "cloud"
 	Default           = "default"
 	ListCommentChar   = "#"
 	ListSeparatorChar = ";"
@@ -45,7 +45,7 @@ var log = new(Log)
 
 type Agent struct {
 	// Imported from input JSON
-	AgentID           int      `json:"agentId"`
+	AgentID           int      `json:"agentId,string"`
 	AgentName         string   `json:"agentName"`
 	AgentType         string   `json:"agentType"`
 	Location          string   `json:"location"`
@@ -76,9 +76,8 @@ func main() {
 	version := flag.Bool("v", false, "Prints out version")
 	ags := flag.Bool("account-groups", false, "Prints out Account Group IDs")
 	output := flag.String("o", SubnetListStrict, "Output type ("+IPList+", "+SubnetListStrict+", "+SubnetListLoose+", "+IPRangeListStrict+", "+IPRangeListLoose+", "+IPBlockListStrict+", "+IPBlockListLoose+", "+CSV+", "+JSON+", "+XML+")")
-	user := flag.String("u", "", "ThousandEyes user")
 	token := flag.String("t", "", "ThousandEyes API token")
-	aid := flag.String("a", "default", "Display Agents available in chosen Account Group ID")
+	aid := flag.String("aid", "default", "Display Agents available in chosen Account Group ID")
 	i4 := flag.Bool("4", false, "Display only IPv4 addresses")
 	i6 := flag.Bool("6", false, "Display only IPv6 addresses")
 	ea := flag.Bool("e", false, "Display only Enterprise Agent addresses")
@@ -95,7 +94,7 @@ func main() {
 
 	if *token == "" {
 		fmt.Printf("\nThousandEyes Agent IP List v%s (%s/%s)\n\n", Ver, runtime.GOOS, runtime.GOARCH)
-		fmt.Printf("Usage:\n  %s -u <user> -t <api-token>\n\nHelp:\n", os.Args[0])
+		fmt.Printf("Usage:\n  %s -t <api-bearer-token>\n\nHelp:\n", os.Args[0])
 		flag.PrintDefaults()
 		fmt.Printf("\n")
 		os.Exit(0)
@@ -135,30 +134,25 @@ func main() {
 
 	if *aid != Default {
 		if _, err := strconv.Atoi(*aid); err != nil {
-			log.Error("%a is not a valid -aid value, it must be a number. Try '-ags' to list the available Account Group IDs.", *aid)
+			log.Error("%a is not a valid -aid value, it must be a number. Try '-account-groups' to list the available Account Group IDs.", *aid)
 			os.Exit(0)
 		}
 	}
 
-	if validateUserToken(*token) {
-		if !validateEmail(*user) {
-			log.Error("'%s' is not a valid ThousandEyes user.", *user)
-			os.Exit(0)
-		}
-	} else if !validateOauthToken(*token) {
-		log.Error("'%s' is not a valid ThousandEyes token. Find your token at https://app.thousandeyes.com/settings/account/?section=profile", *token)
+	if !validateBearerToken(*token) {
+		log.Error("'%s' is not a valid ThousandEyes API Bearer token. Find your token at https://app.thousandeyes.com/settings/account/?section=profile", *token)
 		os.Exit(0)
 	}
 
 	if *ags == true {
-		err := outputAccountGroups(*user, *token)
+		err := outputAccountGroups(*token)
 		if err != nil {
-			log.Error("/accounts API call error: %s", err.Error())
+			log.Error("/v7/account-groups API call error: %s", err.Error())
 		}
 		os.Exit(0)
 	}
 
-	agents, _ := fetchAgents(*user, *token, *aid, enterprise, cloud, ipv4, ipv6, enterprisePublic, enterprisePrivate)
+	agents, _ := fetchAgents(*token, *aid, enterprise, cloud, ipv4, ipv6, enterprisePublic, enterprisePrivate)
 
 	if strings.ToLower(*output) == IPList {
 		outputIPList(agents, *name)
@@ -187,22 +181,12 @@ func main() {
 
 }
 
-func validateEmail(email string) bool {
-	Re := regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,4}$`)
-	return Re.MatchString(email)
-}
-
-func validateUserToken(token string) bool {
-	Re := regexp.MustCompile(`^[a-zA-Z0-9]{32}$`)
+func validateBearerToken(token string) bool {
+	Re := regexp.MustCompile(`^[a-zA-Z0-9-]{36,64}$`)
 	return Re.MatchString(token)
 }
 
-func validateOauthToken(token string) bool {
-	Re := regexp.MustCompile(`^[a-zA-Z0-9-]{36}$`)
-	return Re.MatchString(token)
-}
-
-func apiRequest(user, token, endpoint string) *http.Response {
+func apiRequest(token, endpoint string) *http.Response {
 
 	var netTransport = &http.Transport{
 		Dial: (&net.Dialer{
@@ -217,12 +201,7 @@ func apiRequest(user, token, endpoint string) *http.Response {
 	}
 
 	request, _ := http.NewRequest("GET", ApiUrl+endpoint, nil)
-	if validateOauthToken(token) {
-		request.Header.Set("Authorization", "Bearer "+token)
-	} else {
-		request.SetBasicAuth(user, token)
-	}
-
+	request.Header.Set("Authorization", "Bearer "+token)
 	request.Header.Set("User-Agent", "te-iplist/"+Ver)
 	response, err := netClient.Do(request)
 	if err != nil {
@@ -256,24 +235,24 @@ func apiRequest(user, token, endpoint string) *http.Response {
 
 }
 
-func outputAccountGroups(user, token string) error {
+func outputAccountGroups(token string) error {
 
-	type Account struct {
-		ID               int    `json:"aid"`
-		Name             string `json:"accountName"`
+	type AccountGroup struct {
+		ID               int    `json:"aid,string"`
+		Name             string `json:"accountGroupName"`
 		OrganizationName string `json:"organizationName"`
-		Default          uint   `json:"default"`
+		Default          bool   `json:"isDefaultAccountGroup"`
 	}
 
-	type Accounts struct {
-		Accounts []Account `json:"account"`
+	type AccountGroups struct {
+		AccountGroups []AccountGroup `json:"accountGroups"`
 	}
 
-	var accounts Accounts
+	var accountGroups AccountGroups
 
-	response := apiRequest(user, token, "/accounts.json")
+	response := apiRequest(token, "/v7/account-groups")
 
-	err := json.NewDecoder(response.Body).Decode(&accounts)
+	err := json.NewDecoder(response.Body).Decode(&accountGroups)
 	if err != nil {
 		return err
 	}
@@ -281,7 +260,7 @@ func outputAccountGroups(user, token string) error {
 	maxIdLen := 3
 	maxNameLen := 18
 	maxOrgLen := 17
-	for _, a := range accounts.Accounts {
+	for _, a := range accountGroups.AccountGroups {
 		idStr := strconv.Itoa(a.ID)
 		if len(idStr) > maxIdLen {
 			maxIdLen = len(idStr)
@@ -295,9 +274,9 @@ func outputAccountGroups(user, token string) error {
 	}
 
 	fmt.Printf("\n%s  %s  %s\n", pad("AID", maxIdLen), pad("Organization Name", maxOrgLen), pad("Account Group Name", maxNameLen))
-	for _, a := range accounts.Accounts {
+	for _, a := range accountGroups.AccountGroups {
 		fmt.Printf("\n%s  %s  %s", pad(strconv.Itoa(a.ID), maxIdLen), pad(a.OrganizationName, maxOrgLen), pad(a.Name, maxNameLen))
-		if a.Default > 0 {
+		if a.Default {
 			fmt.Printf(" (default)")
 		}
 	}
@@ -307,7 +286,7 @@ func outputAccountGroups(user, token string) error {
 
 }
 
-func fetchAgents(user, token, aid string, enterprise, cloud, ipv4, ipv6, enterprisePublic, enterprisePrivate bool) ([]Agent, error) {
+func fetchAgents(token, aid string, enterprise, cloud, ipv4, ipv6, enterprisePublic, enterprisePrivate bool) ([]Agent, error) {
 
 	type Agents struct {
 		Agents []Agent `json:"agents"`
@@ -315,12 +294,12 @@ func fetchAgents(user, token, aid string, enterprise, cloud, ipv4, ipv6, enterpr
 
 	var agents Agents
 
-	endpoint := "/agents.json"
+	endpoint := "/v7/agents"
 	if aid != Default {
 		endpoint = endpoint + "?aid=" + aid
 	}
 
-	response := apiRequest(user, token, endpoint)
+	response := apiRequest(token, endpoint)
 
 	err := json.NewDecoder(response.Body).Decode(&agents)
 	if err != nil {
