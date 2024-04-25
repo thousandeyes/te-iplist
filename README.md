@@ -31,19 +31,19 @@ sudo cp te-iplist /usr/local/bin/
 You need to be in possession of a valid ThousandEyes account to use this utility.
 
 ```
-te-iplist -u <user> -t <user-api-token>
+te-iplist -t <api-bearer-token>
 ```
 
 ### Account Groups
 
-#### -a
-Users assigned to multiple Account Groups can list the Agents available in a specific Account Group with the ``-a <accountGroupId>`` argument. You can list available Account Group IDs with:
+#### -aid
+Users assigned to multiple Account Groups can list the Agents available in a specific Account Group with the ``-aid <accountGroupId>`` argument. You can list available Account Group IDs with:
 
 ```
-te-iplist -u <user> -t <user-api-token> -account-groups
+te-iplist -t <api-bearer-token> -account-groups
 ```
 
-If ``-a`` is not provided, user's default Account Group is used.
+If ``-aid`` is not provided, user's default Account Group is used.
 
 ### Output formats
 
