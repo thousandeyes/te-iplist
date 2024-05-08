@@ -265,3 +265,6 @@ Display only Enterprise Agents public IP addresses
 
 #### -e-private
 Display only Enterprise Agents private IP addresses
+
+#### -country <list-of-countries>
+Display only Agents in a given list of countries. Example: `-country US,SI,DE`.

@@ -13,6 +13,7 @@ import (
 	"os"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -20,7 +21,7 @@ import (
 )
 
 const (
-	Ver               = "1.1.0"
+	Ver               = "1.1.1"
 	ApiUrl            = "https://api.thousandeyes.com"
 	IPList            = "ip"
 	SubnetListStrict  = "subnet-strict"
@@ -85,6 +86,7 @@ func main() {
 	eaPub := flag.Bool("e-public", false, "Display only Enterprise Agent Public IP addresses")
 	eaPriv := flag.Bool("e-private", false, "Display only Enterprise Agent Private IP addresses")
 	name := flag.Bool("n", false, "Add Agent name as a comment to "+IPList+", "+SubnetListStrict+", "+SubnetListLoose+", "+IPRangeListStrict+", "+IPRangeListLoose+", "+IPBlockListStrict+" and "+IPBlockListLoose+" output types.")
+	country := flag.String("country", "", "Display only agents in provided countries (i.e. \"US,SI,DE\")")
 	flag.Parse()
 
 	if *version == true {
@@ -152,7 +154,14 @@ func main() {
 		os.Exit(0)
 	}
 
-	agents, _ := fetchAgents(*token, *aid, enterprise, cloud, ipv4, ipv6, enterprisePublic, enterprisePrivate)
+	countries := strings.Split(*country, ",")
+	if len(countries) == 1 {
+		if countries[0] == "" {
+			countries = []string{}
+		}
+	}
+
+	agents, _ := fetchAgents(*token, *aid, enterprise, cloud, ipv4, ipv6, enterprisePublic, enterprisePrivate, countries)
 
 	if strings.ToLower(*output) == IPList {
 		outputIPList(agents, *name)
@@ -286,7 +295,7 @@ func outputAccountGroups(token string) error {
 
 }
 
-func fetchAgents(token, aid string, enterprise, cloud, ipv4, ipv6, enterprisePublic, enterprisePrivate bool) ([]Agent, error) {
+func fetchAgents(token, aid string, enterprise, cloud, ipv4, ipv6, enterprisePublic, enterprisePrivate bool, countries []string) ([]Agent, error) {
 
 	type Agents struct {
 		Agents []Agent `json:"agents"`
@@ -385,6 +394,17 @@ func fetchAgents(token, aid string, enterprise, cloud, ipv4, ipv6, enterprisePub
 			if ipv4 && len(agents.Agents[i].IPv4Addresses) > 0 {
 				// Keep it
 			} else if ipv6 && len(agents.Agents[i].IPv6Addresses) > 0 {
+				// Keep it
+			} else {
+				agents.Agents = append(agents.Agents[:i], agents.Agents[i+1:]...)
+			}
+		}
+	}
+
+	if len(countries) > 0 {
+		for i := len(agents.Agents) - 1; i >= 0; i-- {
+			// Condition to decide if current element has to be deleted:
+			if slices.Contains(countries, agents.Agents[i].CountryID) {
 				// Keep it
 			} else {
 				agents.Agents = append(agents.Agents[:i], agents.Agents[i+1:]...)
