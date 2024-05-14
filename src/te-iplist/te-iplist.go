@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	Ver               = "1.1.1"
+	Ver               = "1.1.2"
 	ApiUrl            = "https://api.thousandeyes.com"
 	IPList            = "ip"
 	SubnetListStrict  = "subnet-strict"
@@ -333,9 +333,11 @@ func fetchAgents(token, aid string, enterprise, cloud, ipv4, ipv6, enterprisePub
 		// Cloud public addresses
 		if agent.AgentType == Cloud && len(agent.IPAddresses) > 0 {
 			for _, ip := range agent.IPAddresses {
-				if ipv6 && strings.Contains(ip, ":") {
+				// ThousandEyes API is returning both IPv4 and IPv6 addresses for Cloud agents that only
+				// use one IP version for tests. Until this is changed (IDEA-5589), we filter out unused IPs
+				if ipv6 && strings.Contains(ip, ":") && strings.Contains(agent.AgentName, "IPv6") {
 					agents.Agents[i].IPv6Addresses = append(agents.Agents[i].IPv6Addresses, net.ParseIP(ip))
-				} else if ipv4 && strings.Contains(ip, ".") {
+				} else if ipv4 && strings.Contains(ip, ".") && !strings.Contains(agent.AgentName, "IPv6") {
 					agents.Agents[i].IPv4Addresses = append(agents.Agents[i].IPv4Addresses, net.ParseIP(ip))
 				}
 			}
