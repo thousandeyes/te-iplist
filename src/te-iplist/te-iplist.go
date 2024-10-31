@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	Ver               = "1.1.2"
+	Ver               = "1.1.3"
 	ApiUrl            = "https://api.thousandeyes.com"
 	IPList            = "ip"
 	SubnetListStrict  = "subnet-strict"
@@ -303,9 +303,9 @@ func fetchAgents(token, aid string, enterprise, cloud, ipv4, ipv6, enterprisePub
 
 	var agents Agents
 
-	endpoint := "/v7/agents"
+	endpoint := "/v7/agents?expand=cluster-member"
 	if aid != Default {
-		endpoint = endpoint + "?aid=" + aid
+		endpoint = endpoint + "&aid=" + aid
 	}
 
 	response := apiRequest(token, endpoint)
